@@ -1,0 +1,20 @@
+criteria:
+  - name: "Klickbar timeline"
+    description: "Klicka på tidslinjen för att seeka video"
+    test: "Ladda upp video, klicka mitt på tidslinjen"
+    expected: "Video seekar till mittenposition, playhead flyttas"
+
+  - name: "Dragbar playhead"
+    description: "Dra playhead för scrubbing med live preview"
+    test: "Dra playhead längs tidslinjen"
+    expected: "Video uppdateras i realtid medan man drar"
+
+  - name: "Omordna klipp"
+    description: "Drag-and-drop för att ändra klippordning"
+    test: "Ladda upp 2+ klipp, dra klipp 2 före klipp 1"
+    expected: "Ordningen ändras, tidslinjen uppdateras"
+
+  - name: "Auto-fit audio"
+    description: "Trimma ljud automatiskt till videolängd"
+    test: "Ladda upp video + längre ljudfil, klicka 'Fit Audio'"
+    expected: "Ljudets trimEnd sätts så att det matchar videolängden"
