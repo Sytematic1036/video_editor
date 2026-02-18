@@ -1,0 +1,40 @@
+{
+  "version": "GUI_EXP-011_v3_20260218_0745_30b4fb5",
+  "tested_at": "2026-02-18T07:45:00+01:00",
+  "test_framework": "playwright",
+  "tests": [
+    {
+      "name": "test_speech_delete_fixed.js",
+      "status": "PASS",
+      "assertions": [
+        {"check": "Direct removeSpeech(1) works", "result": "PASS"},
+        {"check": "Menu remove works when clip is selected", "result": "PASS"},
+        {"check": "Remove button works", "result": "PASS"}
+      ]
+    },
+    {
+      "name": "test_music_delete.js",
+      "status": "PASS",
+      "assertions": [
+        {"check": "removeMusicClip(1) works", "result": "PASS"},
+        {"check": "Remove button works for music clips", "result": "PASS"},
+        {"check": "Removing last clip also clears audioClip", "result": "PASS"}
+      ]
+    },
+    {
+      "name": "test_delete_split_clips.js",
+      "status": "PASS",
+      "assertions": [
+        {"check": "Delete function works on split clips", "result": "PASS"},
+        {"check": "Remove button works on split clips", "result": "PASS"}
+      ]
+    }
+  ],
+  "summary": {
+    "total_tests": 3,
+    "passed": 3,
+    "failed": 0,
+    "total_assertions": 8,
+    "assertions_passed": 8
+  }
+}

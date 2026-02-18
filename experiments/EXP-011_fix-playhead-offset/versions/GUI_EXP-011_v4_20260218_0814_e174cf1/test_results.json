@@ -1,0 +1,41 @@
+{
+  "version": "GUI_EXP-011_v4_20260218_0814_e174cf1",
+  "tested_at": "2026-02-18T08:14:00+01:00",
+  "test_framework": "playwright",
+  "tests": [
+    {
+      "name": "test_undo_redo.js",
+      "status": "PASS",
+      "assertions": [
+        {"check": "Undo/Redo functions exist", "result": "PASS"},
+        {"check": "Undo after add", "result": "PASS"},
+        {"check": "Redo", "result": "PASS"},
+        {"check": "Undo after delete", "result": "PASS"},
+        {"check": "Undo after split", "result": "PASS"},
+        {"check": "Multiple undos", "result": "PASS"},
+        {"check": "Keyboard shortcuts", "result": "PASS"},
+        {"check": "Max stack size", "result": "PASS"},
+        {"check": "Button states", "result": "PASS"}
+      ]
+    },
+    {
+      "name": "test_undo_buttons.js",
+      "status": "PASS",
+      "assertions": [
+        {"check": "Buttons disabled initially", "result": "PASS"},
+        {"check": "Undo enabled after add", "result": "PASS"},
+        {"check": "Undo button works", "result": "PASS"},
+        {"check": "Redo button works", "result": "PASS"},
+        {"check": "Multiple undo clicks", "result": "PASS"},
+        {"check": "Button tooltip", "result": "PASS"}
+      ]
+    }
+  ],
+  "summary": {
+    "total_tests": 2,
+    "passed": 2,
+    "failed": 0,
+    "total_assertions": 15,
+    "assertions_passed": 15
+  }
+}
