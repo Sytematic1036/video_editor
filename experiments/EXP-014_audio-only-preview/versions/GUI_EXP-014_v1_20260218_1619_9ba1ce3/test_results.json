@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-02-18T16:16:45+01:00",
+  "version": "GUI_EXP-014_v1_20260218_1619_9ba1ce3",
+  "tests": {
+    "playwright_gui": {
+      "passed": 10,
+      "failed": 0,
+      "total": 10
+    },
+    "api": {
+      "passed": 4,
+      "failed": 0,
+      "total": 4
+    }
+  },
+  "summary": "All tests passed (14/14)"
+}
