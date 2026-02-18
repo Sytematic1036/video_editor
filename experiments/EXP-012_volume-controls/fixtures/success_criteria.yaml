@@ -1,0 +1,24 @@
+criteria:
+  - name: "Speech Volume slider exists"
+    test: "node test_volume_controls.js"
+    expected: "speechVolumeSlider element exists"
+
+  - name: "Music Volume slider exists"
+    test: "node test_volume_controls.js"
+    expected: "musicVolumeSlider element exists"
+
+  - name: "Volume values can be changed"
+    test: "node test_volume_controls.js"
+    expected: "slider values update correctly"
+
+  - name: "Volume values sent to backend"
+    test: "node test_volume_integration.js"
+    expected: "payload contains speech_volume and music_volume"
+
+  - name: "Server responds to volume parameters"
+    test: "curl http://localhost:5019"
+    expected: "HTTP 200"
+
+  - name: "Undo/Redo works with volume"
+    test: "node test_volume_controls.js"
+    expected: "volume changes can be undone"

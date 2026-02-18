@@ -1,0 +1,31 @@
+{
+  "experiment": "EXP-012_volume-controls",
+  "iteration": "v1_autonomous_2026-02-18",
+  "tested_at": "2026-02-18T09:00:00+01:00",
+  "test_framework": "playwright",
+  "tests": [
+    {
+      "name": "test_volume_controls.js",
+      "status": "PASS",
+      "assertions": [
+        {"check": "Speech Volume slider exists", "result": "PASS"},
+        {"check": "Music Volume slider exists", "result": "PASS"},
+        {"check": "Speech Volume display exists", "result": "PASS"},
+        {"check": "Music Volume display exists", "result": "PASS"},
+        {"check": "Default values correct", "result": "PASS"},
+        {"check": "Speech slider can be changed", "result": "PASS"},
+        {"check": "Music slider can be changed", "result": "PASS"},
+        {"check": "JavaScript variables accessible", "result": "PASS"},
+        {"check": "Slider input updates variables", "result": "PASS"},
+        {"check": "Volume range is 0-200", "result": "PASS"}
+      ]
+    }
+  ],
+  "summary": {
+    "total_tests": 1,
+    "passed": 1,
+    "failed": 0,
+    "total_assertions": 10,
+    "assertions_passed": 10
+  }
+}
