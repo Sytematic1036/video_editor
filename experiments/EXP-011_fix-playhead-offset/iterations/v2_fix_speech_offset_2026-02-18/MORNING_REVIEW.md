@@ -8,61 +8,62 @@
 [x] LYCKADES / [ ] DELVIS / [ ] MISSLYCKADES
 
 ## Problem
-Video Timeline split fungerade exakt vid playhead (tack vare v1 fix), men Speech Track och Music Track hade fortfarande offset-problem.
+Video Timeline split fungerade exakt vid playhead (tack vare v1 fix), men Speech Track och Music Track hade fortfarande offset-problem (~20px / ~1s offset).
 
 ## Rotorsak
-Inkonsekvent användning av `getTrimmedDuration()` vs `clip.duration` för silence-klipp:
+Två problem upptäcktes:
 
-| Funktion | Silence-klipp | Vanliga klipp |
-|----------|---------------|---------------|
-| `renderSpeechTrack()` | `getTrimmedDuration(clip)` ✓ | `getTrimmedDuration(clip)` ✓ |
-| `splitSpeechAtPlayhead()` | `clip.duration` ❌ | `getTrimmedDuration(clip)` ✓ |
-| `splitMusicAtPlayhead()` | `clip.duration` ❌ | `getTrimmedDuration(clip)` ✓ |
-| `findInsertPositionAtPlayhead()` | `clip.duration` ❌ | `getTrimmedDuration(clip)` ✓ |
+### Problem 1: Inkonsekvent getTrimmedDuration()
+Inkonsekvent användning av `getTrimmedDuration()` vs `clip.duration` för silence-klipp.
 
-När rendering använder en beräkning men split-logiken använder en annan, blir det offset.
+### Problem 2: CSS Padding Offset (huvudproblemet)
+`.timeline-container` har `padding: 20px`. Klipp renderas inuti denna paddade container, men `globalPlayhead` positioneras relativt till `.timeline-wrapper` (utan padding). Detta skapade en 20px visuell offset.
 
 ## Lösning
-Ändrade alla funktioner att konsekvent använda `getTrimmedDuration(clip)` för ALLA klipp:
 
-### splitSpeechAtPlayhead()
+### Fix 1: PLAYHEAD_LEFT_OFFSET konstant
 ```javascript
-// FÖRE (felaktigt):
-if (clip.isSilence) {
-    currentTime += clip.duration;
-    continue;
-}
-const clipDur = getTrimmedDuration(clip);
+const PIXELS_PER_SECOND = 20;
+// EXP-011 v2 FIX: Offset to account for .timeline-container padding
+const PLAYHEAD_LEFT_OFFSET = 20;
+```
 
-// EFTER (korrekt):
-const clipDur = getTrimmedDuration(clip);  // Beräkna för ALLA klipp
-if (clip.isSilence) {
-    currentTime += clipDur;
-    continue;
+### Fix 2: updateGlobalPlayhead() med offset
+```javascript
+function updateGlobalPlayhead() {
+    const maxDuration = getMaxDuration();
+    const maxLeft = maxDuration * PIXELS_PER_SECOND;
+    const left = Math.min(playheadPosition * PIXELS_PER_SECOND, maxLeft);
+    // EXP-011 v2 FIX: Add offset to align with clips inside padded container
+    globalPlayhead.style.left = (left + PLAYHEAD_LEFT_OFFSET) + 'px';
 }
 ```
 
-### splitMusicAtPlayhead()
-Samma fix som ovan.
-
-### findInsertPositionAtPlayhead()
+### Fix 3: Dragging med offset
 ```javascript
-// FÖRE (felaktigt):
-const clipDur = clip.isSilence ? clip.duration : getTrimmedDuration(clip);
+// Vid start av drag:
+startLeft: (parseFloat(globalPlayhead.style.left) || PLAYHEAD_LEFT_OFFSET) - PLAYHEAD_LEFT_OFFSET
 
-// EFTER (korrekt):
-const clipDur = getTrimmedDuration(clip);  // Samma beräkning som rendering
+// Vid mousemove:
+globalPlayhead.style.left = (newLeft + PLAYHEAD_LEFT_OFFSET) + 'px';
 ```
+
+### Fix 4: Konsekvent getTrimmedDuration()
+Alla funktioner använder nu `getTrimmedDuration(clip)` för ALLA klipp (inklusive silence).
 
 ## Filer ändrade
-- `src/templates/index.html` - 3 funktioner fixade
+- `src/templates/index.html` - PLAYHEAD_LEFT_OFFSET + 4 funktioner fixade
 
 ## Verifiering
 - [x] Server startar på port 5019 (HTTP 200)
-- [x] Alla 3 fixar finns i koden ("EXP-011 v2 FIX" kommentarer)
-- [ ] Manuell test: Speech Track split vid exakt playhead-position
-- [ ] Manuell test: Music Track split vid exakt playhead-position
-- [ ] Manuell test: Insert Silence börjar vid exakt playhead-position
+- [x] Alla fixar finns i koden ("EXP-011 v2 FIX" kommentarer)
+- [x] **Playwright test: test_playhead_offset.js PASSED**
+  - Playhead vid 5s = 120px (korrekt: 5*20 + 20)
+  - Playhead vid 10s = 220px (korrekt: 10*20 + 20)
+- [x] **Playwright test: test_split_alignment.js PASSED**
+  - Playhead vid 8s = 180px (korrekt)
+  - Split vid 8s → Första klipp 8.00s, andra 12.00s (exakt!)
+- [ ] Manuell verifiering i browser (rekommenderas)
 
 ## Test
 Öppna: http://localhost:5019

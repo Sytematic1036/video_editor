@@ -1,0 +1,32 @@
+{
+  "version": "GUI_EXP-011_v2_20260218_0707_7825419",
+  "tested_at": "2026-02-18T07:07:00+01:00",
+  "test_framework": "playwright",
+  "tests": [
+    {
+      "name": "test_playhead_offset.js",
+      "status": "PASS",
+      "assertions": [
+        {"check": "Playhead at 5s = 120px", "result": "PASS"},
+        {"check": "Playhead at 10s = 220px", "result": "PASS"},
+        {"check": "playheadPosition variable = 10s", "result": "PASS"}
+      ]
+    },
+    {
+      "name": "test_split_alignment.js",
+      "status": "PASS",
+      "assertions": [
+        {"check": "Playhead visual left = 180px", "result": "PASS"},
+        {"check": "First clip duration = 8.00s", "result": "PASS"},
+        {"check": "Second clip duration = 12.00s", "result": "PASS"}
+      ]
+    }
+  ],
+  "summary": {
+    "total_tests": 2,
+    "passed": 2,
+    "failed": 0,
+    "total_assertions": 6,
+    "assertions_passed": 6
+  }
+}
