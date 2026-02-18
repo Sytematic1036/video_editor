@@ -1,0 +1,28 @@
+criteria:
+  - name: "Single playhead"
+    test: "curl -s http://localhost:5018/ | grep -c 'id=\"playhead\"' should return 0"
+    expected: "0 (no old playhead elements)"
+
+  - name: "Global playhead exists"
+    test: "curl -s http://localhost:5018/ | grep -c 'id=\"globalPlayhead\"' should return 1"
+    expected: "1 (exactly one global playhead)"
+
+  - name: "Offset fix applied"
+    test: "curl -s http://localhost:5018/ | grep 'margin-left: -1px'"
+    expected: "CSS contains margin-left: -1px for centering"
+
+  - name: "Server runs on 5018"
+    test: "curl -s -o /dev/null -w '%{http_code}' http://localhost:5018/"
+    expected: "200"
+
+  - name: "Manual: Only one playhead visible"
+    test: "Open http://localhost:5018 and visually verify"
+    expected: "Only one red vertical line (playhead) visible"
+
+  - name: "Manual: Split at exact position"
+    test: "Upload video, position playhead, right-click Video Track → Split"
+    expected: "Split occurs exactly at playhead line (no offset)"
+
+  - name: "Manual: Insert silence at exact position"
+    test: "Upload audio, position playhead, right-click Speech/Music → Insert Silence"
+    expected: "Silence starts exactly at playhead line (no offset)"
