@@ -1,0 +1,24 @@
+criteria:
+  - name: "Preview med endast Speech Track"
+    test: "node test_audio_only_preview.js --speech-only"
+    expected: "Playwright-test passerar, preview genereras"
+
+  - name: "Preview med endast Music Track"
+    test: "node test_audio_only_preview.js --music-only"
+    expected: "Playwright-test passerar, preview genereras"
+
+  - name: "Preview med Speech + Music (ingen video)"
+    test: "node test_audio_only_preview.js --both-audio"
+    expected: "Playwright-test passerar, preview genereras"
+
+  - name: "Export med endast audio"
+    test: "node test_audio_only_preview.js --export"
+    expected: "Playwright-test passerar, export genereras"
+
+  - name: "GUI-knappar aktiva med audio"
+    test: "node test_audio_only_preview.js --gui-buttons"
+    expected: "Preview/Export-knappar klickbara utan video"
+
+  - name: "Felmeddelande utan media"
+    test: "node test_audio_only_preview.js --no-media"
+    expected: "Felmeddelande visas"
