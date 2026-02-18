@@ -1,0 +1,24 @@
+criteria:
+  - name: "Export button exists"
+    test: "node test_export_system.js"
+    expected: "Export button found"
+
+  - name: "Export triggers progress display"
+    test: "node test_export_system.js"
+    expected: "Progress bar visible during export"
+
+  - name: "Download button appears after export"
+    test: "node test_export_system.js"
+    expected: "Download button visible"
+
+  - name: "Export status endpoint works"
+    test: "curl http://localhost:5020/export-status/test"
+    expected: "JSON response with status"
+
+  - name: "GUI loads correctly"
+    test: "node test_export_system.js"
+    expected: "Page loads without errors"
+
+  - name: "All Playwright tests pass"
+    test: "node test_export_system.js"
+    expected: "=== ALL TESTS PASSED ==="
