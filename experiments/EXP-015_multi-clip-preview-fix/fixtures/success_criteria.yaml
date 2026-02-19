@@ -1,0 +1,20 @@
+criteria:
+  - name: "Multi-clip preview shows all clips"
+    test: "node tests/test_final.js"
+    expected: "Both clips appear in timeline: PASS"
+    status: VERIFIED
+
+  - name: "Clear All hides preview section"
+    test: "node tests/test_final.js"
+    expected: "Preview section hidden after clear: PASS"
+    status: VERIFIED
+
+  - name: "Clear All disables preview button"
+    test: "node tests/test_final.js"
+    expected: "Preview button disabled after clear: PASS"
+    status: VERIFIED
+
+  - name: "All Playwright tests pass"
+    test: "node tests/test_final.js"
+    expected: "Results: 9 passed, 0 failed"
+    status: VERIFIED

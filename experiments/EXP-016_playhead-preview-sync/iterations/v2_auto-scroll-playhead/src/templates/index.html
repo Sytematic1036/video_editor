@@ -1,0 +1,3277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Editor - EXP-016 v2 (Auto-scroll Playhead)</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        h1 { text-align: center; margin-bottom: 20px; color: #00d9ff; }
+        .container { max-width: 1400px; margin: 0 auto; }
+
+        /* Track header with upload button */
+        .track-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+        .track-header h3 {
+            color: #00d9ff;
+            margin: 0;
+            flex-grow: 1;
+        }
+        .btn-upload {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+        .btn-upload:hover {
+            transform: scale(1.05);
+        }
+        .btn-upload-video {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .btn-upload-speech {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+        .btn-upload-music {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+        .btn-upload::before {
+            content: '+';
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        /* Timeline container */
+        .timeline-container {
+            background: #0f0f23;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            overflow-x: auto;
+        }
+        .timeline-container h3 { margin-bottom: 10px; color: #00d9ff; }
+
+        /* Time ruler */
+        .time-ruler {
+            height: 25px;
+            position: relative;
+            border-bottom: 1px solid #333;
+            margin-bottom: 5px;
+            min-width: 100%;
+            cursor: pointer;
+        }
+        .time-marker {
+            position: absolute;
+            bottom: 0;
+            font-size: 10px;
+            color: #666;
+            transform: translateX(-50%);
+            pointer-events: none;
+        }
+        .time-marker::before {
+            content: '';
+            position: absolute;
+            bottom: 15px;
+            left: 50%;
+            width: 1px;
+            height: 8px;
+            background: #444;
+        }
+        .time-marker.major::before { height: 12px; background: #666; }
+
+        /* Track */
+        .track {
+            height: 80px;
+            position: relative;
+            background: #1a1a2e;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            min-width: 100%;
+            cursor: pointer;
+        }
+
+        /* Clips on timeline - with trim handles */
+        .timeline-clip {
+            position: absolute;
+            height: 60px;
+            top: 10px;
+            border-radius: 4px;
+            cursor: grab;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            overflow: visible;
+            white-space: nowrap;
+            transition: box-shadow 0.2s, transform 0.1s, opacity 0.1s;
+            user-select: none;
+        }
+        .timeline-clip:hover { box-shadow: 0 0 0 2px #00d9ff; }
+        .timeline-clip.selected { box-shadow: 0 0 0 3px #00ff88; }
+        .timeline-clip.video { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .timeline-clip.audio { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        .timeline-clip.speech { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+        .timeline-clip.silence { background: linear-gradient(135deg, #2c3e50 0%, #4a5568 100%); border: 2px dashed #718096; }
+
+        /* Context menu for insert silence */
+        .context-menu {
+            position: fixed;
+            background: #2d2d44;
+            border: 1px solid #444;
+            border-radius: 8px;
+            padding: 8px 0;
+            min-width: 180px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            z-index: 1000;
+            display: none;
+        }
+        .context-menu.visible { display: block; }
+        .context-menu-item {
+            padding: 10px 16px;
+            cursor: pointer;
+            color: #eee;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .context-menu-item:hover { background: #3d3d5c; }
+        .context-menu-item.disabled { color: #666; cursor: not-allowed; }
+
+        /* Silence dialog */
+        .dialog-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+        .dialog-overlay.visible { display: flex; }
+        .dialog {
+            background: #2d2d44;
+            border-radius: 12px;
+            padding: 24px;
+            min-width: 300px;
+        }
+        .dialog h3 { margin-bottom: 16px; color: #00d9ff; }
+        .dialog label { display: block; margin-bottom: 8px; }
+        .dialog input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #444;
+            border-radius: 6px;
+            background: #1a1a2e;
+            color: #eee;
+            margin-bottom: 16px;
+        }
+        .dialog-buttons { display: flex; gap: 10px; justify-content: flex-end; }
+        .dialog-buttons button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .dialog-buttons .btn-cancel { background: #444; color: #eee; }
+        .dialog-buttons .btn-confirm { background: #00d9ff; color: #000; }
+
+        /* Clip being dragged for reorder */
+        .timeline-clip.reordering {
+            cursor: grabbing;
+            opacity: 0.8;
+            transform: scale(1.02);
+            z-index: 200;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+        }
+
+        /* Drop indicator when dragging clips */
+        .drop-indicator {
+            position: absolute;
+            top: 5px;
+            bottom: 5px;
+            width: 4px;
+            background: #00ff88;
+            border-radius: 2px;
+            z-index: 150;
+            box-shadow: 0 0 10px #00ff88;
+            pointer-events: none;
+        }
+
+        /* Clip content area (visible part) */
+        .clip-content {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            padding: 0 35px;
+            overflow: hidden;
+            border-radius: 4px;
+        }
+        .clip-info {
+            display: flex;
+            flex-direction: column;
+            z-index: 1;
+        }
+        .clip-name { font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+        .clip-duration { font-size: 10px; opacity: 0.8; }
+
+        /* Trim handles - LARGER and more visible */
+        .trim-handle {
+            position: absolute;
+            top: -5px;
+            bottom: -5px;
+            width: 20px;
+            background: linear-gradient(180deg, #00ff88 0%, #00cc6a 100%);
+            cursor: ew-resize;
+            z-index: 20;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+        }
+        .trim-handle:hover {
+            background: linear-gradient(180deg, #00ffaa 0%, #00ff88 100%);
+            transform: scaleX(1.3);
+            box-shadow: 0 4px 12px rgba(0,255,136,0.5);
+        }
+        .trim-handle.dragging {
+            background: linear-gradient(180deg, #ffff00 0%, #ffcc00 100%);
+            transform: scaleX(1.5);
+            box-shadow: 0 4px 16px rgba(255,255,0,0.6);
+        }
+        .trim-handle-left {
+            left: -10px;
+            border-radius: 6px 0 0 6px;
+        }
+        .trim-handle-right {
+            right: -10px;
+            border-radius: 0 6px 6px 0;
+        }
+        .trim-handle::after {
+            content: '||';
+            font-size: 10px;
+            font-weight: bold;
+            color: rgba(0,0,0,0.6);
+            letter-spacing: 1px;
+        }
+
+        /* Trimmed area indicator (grayed out) - shown OUTSIDE the clip */
+        .trim-ghost {
+            position: absolute;
+            top: 10px;
+            height: 60px;
+            background: repeating-linear-gradient(
+                45deg,
+                rgba(100,100,100,0.3),
+                rgba(100,100,100,0.3) 5px,
+                rgba(50,50,50,0.3) 5px,
+                rgba(50,50,50,0.3) 10px
+            );
+            border: 1px dashed #666;
+            border-radius: 4px;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* Remove button */
+        .remove-btn {
+            position: absolute;
+            right: 25px;
+            top: 3px;
+            background: rgba(255,0,0,0.7);
+            border: none;
+            color: white;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 12px;
+            z-index: 25;
+            font-weight: bold;
+        }
+        .remove-btn:hover { background: rgba(255,0,0,1); transform: scale(1.1); }
+
+        /* Drag and Drop reorder styles */
+        .timeline-clip.dragging {
+            opacity: 0.5 !important;
+            cursor: grabbing !important;
+        }
+        .timeline-clip.drag-over-left {
+            border-left: 4px solid #00ff00 !important;
+            box-shadow: -5px 0 15px rgba(0,255,0,0.5) !important;
+        }
+        .timeline-clip.drag-over-right {
+            border-right: 4px solid #00ff00 !important;
+            box-shadow: 5px 0 15px rgba(0,255,0,0.5) !important;
+        }
+        .timeline-clip.video {
+            cursor: grab;
+        }
+        .timeline-clip.video:active {
+            cursor: grabbing;
+        }
+
+        /* Timeline wrapper for global playhead */
+        .timeline-wrapper {
+            position: relative;
+        }
+
+        /* Global Playhead - spans ALL tracks */
+        /* EXP-011 FIX: Added margin-left: -1px to center the 2px line at exact position */
+        .global-playhead {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            margin-left: -1px; /* Center the playhead line at exact position */
+            background: #ff3333;
+            z-index: 500;
+            cursor: ew-resize;
+            box-shadow: 0 0 8px rgba(255,50,50,0.8);
+            pointer-events: auto;
+        }
+        .global-playhead:hover {
+            width: 4px;
+            margin-left: -1px;
+            box-shadow: 0 0 15px rgba(255,50,50,1);
+        }
+        .global-playhead.dragging {
+            width: 4px;
+            margin-left: -1px;
+            background: #ffff00;
+            box-shadow: 0 0 20px rgba(255,255,0,1);
+        }
+        .global-playhead::before {
+            content: '';
+            position: absolute;
+            top: -8px;
+            left: -6px;
+            width: 0;
+            height: 0;
+            border-left: 7px solid transparent;
+            border-right: 7px solid transparent;
+            border-top: 10px solid #ff3333;
+        }
+        .global-playhead.dragging::before {
+            border-top-color: #ffff00;
+        }
+        /* Larger hit area for global playhead */
+        .global-playhead-hitarea {
+            position: absolute;
+            top: -10px;
+            bottom: 0;
+            left: -8px;
+            width: 18px;
+            cursor: ew-resize;
+            z-index: 501;
+        }
+        .global-playhead-time {
+            position: absolute;
+            top: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #ff3333;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+        .global-playhead.dragging .global-playhead-time {
+            background: #ffff00;
+            color: #000;
+        }
+
+        /* Playhead context menu */
+        .playhead-context-menu {
+            position: fixed;
+            background: #2d2d44;
+            border: 1px solid #ff3333;
+            border-radius: 8px;
+            padding: 8px 0;
+            min-width: 180px;
+            box-shadow: 0 4px 12px rgba(255,50,50,0.4);
+            z-index: 2000;
+            display: none;
+        }
+        .playhead-context-menu.visible { display: block; }
+        .playhead-context-menu-item {
+            padding: 10px 16px;
+            cursor: pointer;
+            color: #eee;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .playhead-context-menu-item:hover { background: #3d3d5c; }
+        .playhead-context-menu-item.disabled { color: #666; cursor: not-allowed; }
+
+        /* Track-specific context menus */
+        .track-context-menu {
+            position: fixed;
+            background: #2d2d44;
+            border: 1px solid #444;
+            border-radius: 8px;
+            padding: 8px 0;
+            min-width: 200px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            z-index: 2000;
+            display: none;
+        }
+        .track-context-menu.visible { display: block; }
+        .track-context-menu-header {
+            padding: 8px 16px;
+            color: #888;
+            font-size: 11px;
+            text-transform: uppercase;
+            border-bottom: 1px solid #444;
+            margin-bottom: 4px;
+        }
+        .track-context-menu-item {
+            padding: 10px 16px;
+            cursor: pointer;
+            color: #eee;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .track-context-menu-item:hover { background: #3d3d5c; }
+        .track-context-menu-item.disabled { color: #666; cursor: not-allowed; }
+
+        /* Track-specific border colors */
+        .track-context-menu.video-menu { border-color: #667eea; }
+        .track-context-menu.video-menu .track-context-menu-header { color: #667eea; }
+        .track-context-menu.speech-menu { border-color: #38ef7d; }
+        .track-context-menu.speech-menu .track-context-menu-header { color: #38ef7d; }
+        .track-context-menu.music-menu { border-color: #f5576c; }
+        .track-context-menu.music-menu .track-context-menu-header { color: #f5576c; }
+
+        /* Old playhead styles (kept for compatibility) */
+        .playhead {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #ff3333;
+            z-index: 100;
+            cursor: ew-resize;
+            box-shadow: 0 0 8px rgba(255,50,50,0.8);
+            display: none; /* Hidden - using global playhead now */
+        }
+        .playhead-hitarea {
+            position: absolute;
+            top: -10px;
+            bottom: 0;
+            left: -8px;
+            width: 18px;
+            cursor: ew-resize;
+            z-index: 101;
+        }
+        .playhead-time {
+            position: absolute;
+            top: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #ff3333;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+        .playhead.dragging .playhead-time {
+            background: #ffff00;
+            color: #000;
+        }
+
+        /* Crossfade indicator */
+        .crossfade-zone {
+            position: absolute;
+            height: 60px;
+            top: 10px;
+            background: linear-gradient(90deg, rgba(255,255,255,0.1), rgba(255,255,255,0.3), rgba(255,255,255,0.1));
+            border: 1px dashed rgba(255,255,255,0.3);
+            border-radius: 4px;
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        /* Preview section */
+        .preview-section {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .preview-section h3 { margin-bottom: 15px; color: #00d9ff; }
+        .video-preview {
+            max-width: 100%;
+            max-height: 400px;
+            background: #000;
+            border-radius: 8px;
+        }
+        .preview-controls {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .preview-controls button, .preview-controls select {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            background: #333;
+            color: #eee;
+        }
+        .btn-play { background: #00d9ff; color: #000; }
+        .btn-play:hover { background: #00b8d4; }
+        .btn-preview-full {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ffa500 100%);
+            color: #000;
+            font-weight: bold;
+        }
+        .btn-preview-full:hover { background: linear-gradient(135deg, #ff8080 0%, #ffb830 100%); }
+        .btn-preview-full:disabled { background: #444; color: #888; cursor: not-allowed; }
+
+        /* Fit Audio button */
+        .btn-fit-audio {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: #000;
+            font-weight: bold;
+        }
+        .btn-fit-audio:hover { background: linear-gradient(135deg, #f5a0fc 0%, #f77080 100%); }
+        .btn-fit-audio:disabled { background: #444; color: #888; cursor: not-allowed; }
+
+        /* Trim info display */
+        .trim-info {
+            margin-top: 10px;
+            padding: 10px;
+            background: #0f0f23;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #888;
+        }
+        .trim-info span { color: #00ff88; font-weight: bold; }
+        .trim-info strong { color: #00d9ff; }
+
+        /* Settings */
+        .settings {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            background: #16213e;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+        .setting-group label { display: block; margin-bottom: 5px; color: #888; font-size: 12px; }
+        .setting-group input, .setting-group select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #333;
+            border-radius: 6px;
+            background: #0f0f23;
+            color: #eee;
+            font-size: 14px;
+        }
+        /* EXP-012: Volume slider styles */
+        .setting-group input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            height: 8px;
+            border-radius: 4px;
+            background: linear-gradient(to right, #00d9ff 0%, #00ff88 50%, #ff4444 100%);
+            outline: none;
+            padding: 0;
+        }
+        .setting-group input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #fff;
+            cursor: pointer;
+            border: 2px solid #00d9ff;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        .setting-group input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #fff;
+            cursor: pointer;
+            border: 2px solid #00d9ff;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        .setting-group label span {
+            float: right;
+            color: #00ff88;
+            font-weight: bold;
+        }
+
+        /* Buttons */
+        .buttons { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap; }
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-export { background: linear-gradient(135deg, #00d9ff 0%, #00ff88 100%); color: #000; font-weight: bold; }
+        .btn-export:hover { transform: scale(1.05); }
+        .btn-export:disabled { background: #444; color: #888; cursor: not-allowed; transform: none; }
+        .btn-clear { background: #333; color: #eee; }
+        /* EXP-011 v4: Undo/Redo buttons */
+        .btn-undo, .btn-redo { background: #2a5a8a; color: #fff; font-weight: bold; min-width: 80px; }
+        .btn-undo:hover, .btn-redo:hover { background: #3a7aba; }
+        .btn-undo:disabled, .btn-redo:disabled { background: #333; color: #666; cursor: not-allowed; }
+
+        /* Status */
+        .status {
+            text-align: center;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .status.success { display: block; background: rgba(0,255,136,0.2); border: 1px solid #00ff88; }
+        .status.error { display: block; background: rgba(255,0,0,0.2); border: 1px solid #ff4444; }
+        .status.loading { display: block; background: rgba(0,217,255,0.2); border: 1px solid #00d9ff; }
+        .status a { color: #00ff88; }
+
+        /* Scale info */
+        .scale-info { font-size: 12px; color: #666; margin-bottom: 10px; }
+
+        /* Instructions */
+        .instructions {
+            background: #16213e;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            color: #888;
+        }
+        .instructions h4 { color: #00d9ff; margin-bottom: 10px; }
+        .instructions ul { margin-left: 20px; }
+        .instructions li { margin-bottom: 5px; }
+        .instructions strong { color: #00ff88; }
+        .instructions em { color: #ffa500; font-style: normal; }
+
+        /* EXP-013: Export Panel Styles */
+        .export-panel {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .export-panel h3 { color: #00d9ff; margin-bottom: 15px; }
+        .export-panel.exporting { border: 2px solid #ffa500; }
+        .export-panel.completed { border: 2px solid #00ff88; }
+
+        /* Progress bar */
+        .progress-container {
+            background: #0f0f23;
+            border-radius: 8px;
+            height: 30px;
+            overflow: hidden;
+            margin-bottom: 15px;
+            position: relative;
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #00d9ff 0%, #00ff88 100%);
+            border-radius: 8px;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .progress-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+        }
+        .progress-message {
+            text-align: center;
+            color: #888;
+            font-size: 13px;
+            margin-bottom: 15px;
+        }
+
+        /* Export buttons */
+        .export-buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px; }
+        .btn-export-final {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a5a 100%);
+            color: #fff;
+            font-weight: bold;
+            padding: 15px 30px;
+            font-size: 16px;
+        }
+        .btn-export-final:hover { background: linear-gradient(135deg, #ff8080 0%, #ff6b6b 100%); transform: scale(1.02); }
+        .btn-export-final:disabled { background: #444; color: #888; cursor: not-allowed; transform: none; }
+        .btn-download {
+            background: linear-gradient(135deg, #00ff88 0%, #00d9ff 100%);
+            color: #000;
+            font-weight: bold;
+            padding: 15px 30px;
+            font-size: 16px;
+        }
+        .btn-download:hover { transform: scale(1.02); }
+
+        /* Storage info */
+        .storage-info {
+            background: #0f0f23;
+            border-radius: 8px;
+            padding: 15px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        .storage-item { text-align: center; }
+        .storage-item .value { font-size: 24px; font-weight: bold; color: #00d9ff; }
+        .storage-item .label { font-size: 12px; color: #888; }
+
+        /* Export list */
+        .exports-list {
+            background: #0f0f23;
+            border-radius: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .exports-list-header {
+            padding: 10px 15px;
+            background: #2d2d44;
+            border-radius: 8px 8px 0 0;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+        }
+        .export-item {
+            padding: 10px 15px;
+            border-bottom: 1px solid #2d2d44;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .export-item:hover { background: rgba(0,217,255,0.1); }
+        .export-item .filename { flex-grow: 1; }
+        .export-item .size { color: #888; margin-right: 15px; }
+        .export-item .btn-small {
+            padding: 5px 10px;
+            font-size: 12px;
+            background: #2a5a8a;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .export-item .btn-small:hover { background: #3a7aba; }
+
+        /* Cleanup button */
+        .btn-cleanup {
+            background: #4a4a5a;
+            color: #eee;
+            font-size: 13px;
+        }
+        .btn-cleanup:hover { background: #5a5a6a; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Video Editor - EXP-013 Export System</h1>
+
+        <div class="instructions">
+            <h4>EXP-013: Robust Export System</h4>
+            <ul>
+                <li><strong>Export to Full HD</strong> (1920x1080) - High quality final render</li>
+                <li><strong>Progress tracking</strong> - Watch export progress in real-time</li>
+                <li><strong>Download</strong> - Easy download of exported files</li>
+                <li><strong>Cleanup</strong> - Remove old temporary files</li>
+            </ul>
+            <h4 style="margin-top: 10px;">Volume Controls (from EXP-012)</h4>
+            <ul>
+                <li><strong>Speech Volume</strong> (0-200%) - Control voiceover volume</li>
+                <li><strong>Music Volume</strong> (0-200%) - Control background music</li>
+            </ul>
+            <h4 style="margin-top: 10px;">Other Features</h4>
+            <ul>
+                <li><strong>Playhead</strong> (red line) spans ALL tracks</li>
+                <li><strong>+ Add buttons</strong> - Upload to specific tracks</li>
+                <li><strong>Drag clips</strong> to reorder (video track)</li>
+            </ul>
+        </div>
+
+        <!-- Preview Section -->
+        <div class="preview-section" id="previewSection" style="display:none;">
+            <h3>Preview</h3>
+            <video class="video-preview" id="videoPreview" controls></video>
+            <audio id="audioPreview" controls style="width:100%; margin-top:10px; display:none;"></audio>
+            <div class="preview-controls">
+                <button class="btn-preview-full" id="previewFullBtn" disabled>Preview Full Composition</button>
+                <button class="btn-play" id="playBtn">Play</button>
+                <button class="btn-fit-audio" id="fitAudioBtn" disabled>Fit Audio to Video</button>
+                <select id="previewSelect">
+                    <option value="">Select clip to preview...</option>
+                </select>
+            </div>
+            <div class="trim-info" id="trimInfo">Click a clip to select and trim it</div>
+        </div>
+
+        <!-- Timeline Wrapper with Global Playhead -->
+        <div class="timeline-wrapper" id="timelineWrapper">
+            <!-- Global Playhead (spans all tracks) -->
+            <div class="global-playhead" id="globalPlayhead" style="left: 0px;">
+                <div class="global-playhead-hitarea"></div>
+                <div class="global-playhead-time" id="globalPlayheadTime">0:00</div>
+            </div>
+
+            <!-- Video Timeline -->
+            <div class="timeline-container">
+                <div class="track-header">
+                    <h3>Video Timeline</h3>
+                    <button class="btn-upload btn-upload-video" id="btnUploadVideo">Add Video</button>
+                </div>
+                <div class="scale-info" id="scaleInfo">Scale: 20px = 1 second | Total: 0s</div>
+                <div style="overflow-x: auto; position: relative;" class="track-scroll" id="videoTrackScroll">
+                    <div class="time-ruler" id="videoRuler"></div>
+                    <div class="track" id="videoTrack"></div>
+                </div>
+            </div>
+
+            <!-- Speech Timeline (voiceover) -->
+            <div class="timeline-container">
+                <div class="track-header">
+                    <h3>Speech Track</h3>
+                    <button class="btn-upload btn-upload-speech" id="btnUploadSpeech">Add Speech</button>
+                </div>
+                <div style="overflow-x: auto;" class="track-scroll">
+                    <div class="time-ruler" id="speechRuler"></div>
+                    <div class="track" id="speechTrack" style="background: #1a2e1a;"></div>
+                </div>
+            </div>
+
+            <!-- Music Timeline -->
+            <div class="timeline-container">
+                <div class="track-header">
+                    <h3>Music Track</h3>
+                    <button class="btn-upload btn-upload-music" id="btnUploadMusic">Add Music</button>
+                </div>
+                <div style="overflow-x: auto;" class="track-scroll">
+                    <div class="time-ruler" id="audioRuler"></div>
+                    <div class="track" id="audioTrack"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Playhead Context Menu (legacy - kept for compatibility) -->
+        <div class="playhead-context-menu" id="playheadContextMenu" style="display:none;">
+            <div class="playhead-context-menu-item" id="menuPlayheadInsertSilence">+ Insert Silence at Playhead</div>
+            <div class="playhead-context-menu-item" id="menuPlayheadSplitClip">✂ Split Clip at Playhead</div>
+        </div>
+
+        <!-- Video Track Context Menu -->
+        <div class="track-context-menu video-menu" id="videoTrackMenu">
+            <div class="track-context-menu-header">Video Track</div>
+            <div class="track-context-menu-item" id="menuVideoSplit">✂ Split at Playhead</div>
+        </div>
+
+        <!-- Speech Track Context Menu -->
+        <div class="track-context-menu speech-menu" id="speechTrackMenu">
+            <div class="track-context-menu-header">Speech Track</div>
+            <div class="track-context-menu-item" id="menuSpeechInsertSilence">+ Insert Silence at Playhead</div>
+            <div class="track-context-menu-item" id="menuSpeechSplit">✂ Split at Playhead</div>
+        </div>
+
+        <!-- Music Track Context Menu -->
+        <div class="track-context-menu music-menu" id="musicTrackMenu">
+            <div class="track-context-menu-header">Music Track</div>
+            <div class="track-context-menu-item" id="menuMusicInsertSilence">+ Insert Silence at Playhead</div>
+            <div class="track-context-menu-item" id="menuMusicSplit">✂ Split at Playhead</div>
+        </div>
+
+        <!-- Context Menu (clip context menu) -->
+        <div class="context-menu" id="contextMenu">
+            <div class="context-menu-item" id="menuInsertSilence">+ Insert Silence</div>
+            <div class="context-menu-item" id="menuRemoveClip">x Remove Clip</div>
+        </div>
+
+        <!-- Insert Silence Dialog -->
+        <div class="dialog-overlay" id="silenceDialog">
+            <div class="dialog">
+                <h3>Insert Silence</h3>
+                <label>Duration (seconds)</label>
+                <input type="number" id="silenceDuration" value="2.0" min="0.1" max="60" step="0.1">
+                <div class="dialog-buttons">
+                    <button class="btn-cancel" id="silenceCancel">Cancel</button>
+                    <button class="btn-confirm" id="silenceConfirm">Insert</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings -->
+        <div class="settings">
+            <div class="setting-group">
+                <label>Crossfade (s)</label>
+                <input type="number" id="crossfadeDuration" value="1.0" min="0.1" max="5" step="0.1">
+            </div>
+            <div class="setting-group">
+                <label>Transition</label>
+                <select id="crossfadeTransition">
+                    <option value="fade">Fade</option>
+                    <option value="wipeleft">Wipe Left</option>
+                    <option value="dissolve">Dissolve</option>
+                    <option value="fadeblack">Fade Black</option>
+                    <option value="circleopen">Circle Open</option>
+                </select>
+            </div>
+            <!-- EXP-012: Separate volume controls for Speech and Music -->
+            <div class="setting-group">
+                <label>Speech Volume <span id="speechVolumeDisplay">100%</span></label>
+                <input type="range" id="speechVolumeSlider" value="100" min="0" max="200" step="5">
+            </div>
+            <div class="setting-group">
+                <label>Music Volume <span id="musicVolumeDisplay">50%</span></label>
+                <input type="range" id="musicVolumeSlider" value="50" min="0" max="200" step="5">
+            </div>
+            <div class="setting-group">
+                <label>Music Fade In (s)</label>
+                <input type="number" id="audioFadeIn" value="1.0" min="0" max="10" step="0.5">
+            </div>
+            <div class="setting-group">
+                <label>Music Fade Out (s)</label>
+                <input type="number" id="audioFadeOut" value="2.0" min="0" max="10" step="0.5">
+            </div>
+        </div>
+
+        <div class="buttons">
+            <button class="btn-undo" id="undoBtn" disabled title="Undo (Ctrl+Z)">↶ Undo</button>
+            <button class="btn-redo" id="redoBtn" disabled title="Redo (Ctrl+Y)">↷ Redo</button>
+            <button class="btn-export" id="exportBtn" disabled>Preview (720p)</button>
+            <button class="btn-clear" id="clearBtn">Clear All</button>
+        </div>
+
+        <div class="status" id="status"></div>
+
+        <!-- EXP-013: Export Panel -->
+        <div class="export-panel" id="exportPanel">
+            <h3>Export to Full HD</h3>
+
+            <!-- Progress section (hidden until export starts) -->
+            <div id="exportProgress" style="display: none;">
+                <div class="progress-container">
+                    <div class="progress-bar" id="progressBar" style="width: 0%;"></div>
+                    <div class="progress-text" id="progressText">0%</div>
+                </div>
+                <div class="progress-message" id="progressMessage">Ready to export</div>
+            </div>
+
+            <!-- Export buttons -->
+            <div class="export-buttons">
+                <button class="btn-export-final" id="exportFinalBtn" disabled>Export Final Video (1080p)</button>
+                <button class="btn-download" id="downloadBtn" style="display: none;">Download</button>
+            </div>
+
+            <!-- Storage info -->
+            <div class="storage-info" id="storageInfo">
+                <div class="storage-item">
+                    <div class="value" id="uploadsSize">0</div>
+                    <div class="label">Uploads (MB)</div>
+                </div>
+                <div class="storage-item">
+                    <div class="value" id="previewsSize">0</div>
+                    <div class="label">Previews (MB)</div>
+                </div>
+                <div class="storage-item">
+                    <div class="value" id="exportsSize">0</div>
+                    <div class="label">Exports (MB)</div>
+                </div>
+                <div class="storage-item">
+                    <div class="value" id="exportsCount">0</div>
+                    <div class="label">Export files</div>
+                </div>
+            </div>
+
+            <!-- Exports list -->
+            <div class="exports-list" id="exportsList">
+                <div class="exports-list-header">
+                    <span>Previous Exports</span>
+                    <button class="btn-cleanup" id="cleanupBtn">Cleanup Old Files</button>
+                </div>
+                <div id="exportsListContent">
+                    <div class="export-item" style="color: #666; justify-content: center;">No exports yet</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const PIXELS_PER_SECOND = 20;
+        // EXP-011 v2 FIX: Offset to account for .timeline-container padding
+        // The globalPlayhead is in timeline-wrapper, but clips are inside
+        // timeline-container which has 20px padding. This creates a visual offset.
+        const PLAYHEAD_LEFT_OFFSET = 20;
+
+        // EXP-016: Format time as M:SS (e.g., 0:30, 1:00, 1:30)
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return mins + ':' + secs.toString().padStart(2, '0');
+        }
+
+        // Track elements
+        const videoTrack = document.getElementById('videoTrack');
+        const audioTrack = document.getElementById('audioTrack');
+        const speechTrack = document.getElementById('speechTrack');
+        const videoRuler = document.getElementById('videoRuler');
+        const audioRuler = document.getElementById('audioRuler');
+        const speechRuler = document.getElementById('speechRuler');
+        const exportBtn = document.getElementById('exportBtn');
+        const statusDiv = document.getElementById('status');
+
+        // Upload buttons
+        const btnUploadVideo = document.getElementById('btnUploadVideo');
+        const btnUploadSpeech = document.getElementById('btnUploadSpeech');
+        const btnUploadMusic = document.getElementById('btnUploadMusic');
+
+        // Context menu elements
+        const contextMenu = document.getElementById('contextMenu');
+        const silenceDialog = document.getElementById('silenceDialog');
+        const silenceDurationInput = document.getElementById('silenceDuration');
+
+        // Speech track data
+        let speechClips = [];  // Array of speech clips and silence segments
+        let contextMenuTarget = null;  // Where to insert silence
+
+        // Music track data (EXP-010: converted to array for Insert Silence support)
+        let musicClips = [];  // Array of music clips and silence segments
+
+        // Track context menus (EXP-010)
+        const videoTrackMenu = document.getElementById('videoTrackMenu');
+        const speechTrackMenu = document.getElementById('speechTrackMenu');
+        const musicTrackMenu = document.getElementById('musicTrackMenu');
+        let activeTrackMenu = null;  // Currently visible track menu
+        const previewSection = document.getElementById('previewSection');
+        const videoPreview = document.getElementById('videoPreview');
+        const audioPreview = document.getElementById('audioPreview');
+        const previewSelect = document.getElementById('previewSelect');
+        const playBtn = document.getElementById('playBtn');
+        const previewFullBtn = document.getElementById('previewFullBtn');
+        const fitAudioBtn = document.getElementById('fitAudioBtn');
+        const scaleInfo = document.getElementById('scaleInfo');
+        const trimInfo = document.getElementById('trimInfo');
+
+        let videoClips = [];
+        let isPlayingPreview = false;
+        let previewDuration = 0;
+        let timelineDuration = 0;
+        let audioClip = null;
+        let selectedClip = null;
+
+        // ==================== EXP-014: Audio-Only Support ====================
+        // Helper function to check if there's any media to preview/export
+        function hasAnyMedia() {
+            const hasVideo = videoClips.length > 0;
+            const hasSpeech = speechClips.length > 0 && speechClips.some(c => !c.is_silence || c.duration > 0);
+            const hasMusic = audioClip !== null;
+            return hasVideo || hasSpeech || hasMusic;
+        }
+
+        // ==================== EXP-011 v4: UNDO/REDO SYSTEM ====================
+        const MAX_UNDO_STEPS = 20;
+        let undoStack = [];
+        let redoStack = [];
+
+        // Save current state to undo stack
+        function saveState(actionName = 'unknown') {
+            const state = {
+                action: actionName,
+                timestamp: Date.now(),
+                videoClips: JSON.parse(JSON.stringify(videoClips)),
+                speechClips: JSON.parse(JSON.stringify(speechClips)),
+                musicClips: JSON.parse(JSON.stringify(musicClips)),
+                audioClip: audioClip ? JSON.parse(JSON.stringify(audioClip)) : null,
+            };
+            undoStack.push(state);
+            // Limit stack size
+            if (undoStack.length > MAX_UNDO_STEPS) {
+                undoStack.shift();
+            }
+            // Clear redo stack when new action is performed
+            redoStack = [];
+            updateUndoRedoButtons();
+            console.log(`[Undo] Saved state: ${actionName}, stack size: ${undoStack.length}`);
+        }
+
+        // Undo last action
+        function undo() {
+            if (undoStack.length === 0) {
+                showStatus('Nothing to undo', 'info');
+                return;
+            }
+            // Save current state to redo stack
+            const currentState = {
+                action: 'before_undo',
+                timestamp: Date.now(),
+                videoClips: JSON.parse(JSON.stringify(videoClips)),
+                speechClips: JSON.parse(JSON.stringify(speechClips)),
+                musicClips: JSON.parse(JSON.stringify(musicClips)),
+                audioClip: audioClip ? JSON.parse(JSON.stringify(audioClip)) : null,
+            };
+            redoStack.push(currentState);
+
+            // Restore previous state
+            const prevState = undoStack.pop();
+            videoClips = prevState.videoClips;
+            speechClips = prevState.speechClips;
+            musicClips = prevState.musicClips;
+            audioClip = prevState.audioClip;
+
+            renderTimeline();
+            updatePreviewSelect();
+            updateUndoRedoButtons();
+            showStatus(`Undo: ${prevState.action}`, 'success');
+            console.log(`[Undo] Restored: ${prevState.action}, stack size: ${undoStack.length}`);
+        }
+
+        // Redo last undone action
+        function redo() {
+            if (redoStack.length === 0) {
+                showStatus('Nothing to redo', 'info');
+                return;
+            }
+            // Save current state to undo stack
+            const currentState = {
+                action: 'before_redo',
+                timestamp: Date.now(),
+                videoClips: JSON.parse(JSON.stringify(videoClips)),
+                speechClips: JSON.parse(JSON.stringify(speechClips)),
+                musicClips: JSON.parse(JSON.stringify(musicClips)),
+                audioClip: audioClip ? JSON.parse(JSON.stringify(audioClip)) : null,
+            };
+            undoStack.push(currentState);
+
+            // Restore redo state
+            const redoState = redoStack.pop();
+            videoClips = redoState.videoClips;
+            speechClips = redoState.speechClips;
+            musicClips = redoState.musicClips;
+            audioClip = redoState.audioClip;
+
+            renderTimeline();
+            updatePreviewSelect();
+            updateUndoRedoButtons();
+            showStatus('Redo', 'success');
+            console.log(`[Redo] Restored, stack size: ${redoStack.length}`);
+        }
+
+        // Update undo/redo button states
+        function updateUndoRedoButtons() {
+            const undoBtn = document.getElementById('undoBtn');
+            const redoBtn = document.getElementById('redoBtn');
+            if (undoBtn) {
+                undoBtn.disabled = undoStack.length === 0;
+                undoBtn.title = undoStack.length > 0
+                    ? `Undo: ${undoStack[undoStack.length - 1].action} (${undoStack.length})`
+                    : 'Nothing to undo';
+            }
+            if (redoBtn) {
+                redoBtn.disabled = redoStack.length === 0;
+                redoBtn.title = redoStack.length > 0
+                    ? `Redo (${redoStack.length})`
+                    : 'Nothing to redo';
+            }
+        }
+
+        // Keyboard shortcuts for undo/redo
+        document.addEventListener('keydown', (e) => {
+            // Ctrl+Z = Undo
+            if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
+                e.preventDefault();
+                undo();
+            }
+            // Ctrl+Y or Ctrl+Shift+Z = Redo
+            if ((e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && e.key === 'z')) {
+                e.preventDefault();
+                redo();
+            }
+        });
+        // ==================== END UNDO/REDO SYSTEM ====================
+
+        // ==================== EXP-012: VOLUME CONTROLS ====================
+        let speechVolume = 100;  // 0-200 (percentage)
+        let musicVolume = 50;    // 0-200 (percentage)
+
+        const speechVolumeSlider = document.getElementById('speechVolumeSlider');
+        const musicVolumeSlider = document.getElementById('musicVolumeSlider');
+        const speechVolumeDisplay = document.getElementById('speechVolumeDisplay');
+        const musicVolumeDisplay = document.getElementById('musicVolumeDisplay');
+
+        // Speech volume slider handler
+        speechVolumeSlider.addEventListener('input', (e) => {
+            speechVolume = parseInt(e.target.value);
+            speechVolumeDisplay.textContent = speechVolume + '%';
+            console.log('[Volume] Speech:', speechVolume + '%');
+        });
+
+        // Music volume slider handler
+        musicVolumeSlider.addEventListener('input', (e) => {
+            musicVolume = parseInt(e.target.value);
+            musicVolumeDisplay.textContent = musicVolume + '%';
+            console.log('[Volume] Music:', musicVolume + '%');
+        });
+
+        // Get volume as decimal (0-2.0 for ffmpeg)
+        function getSpeechVolumeDecimal() {
+            return speechVolume / 100;
+        }
+
+        function getMusicVolumeDecimal() {
+            return musicVolume / 100;
+        }
+        // ==================== END VOLUME CONTROLS ====================
+
+        // Drag state for trim handles
+        let isDraggingTrim = false;
+        let trimDragData = null;
+
+        // Drag state for playhead
+        let isDraggingPlayhead = false;
+        let playheadDragData = null;
+
+        // Drag state for clip reordering
+        let isDraggingClip = false;
+        let clipDragData = null;
+        let dropIndicator = null;
+
+        // ==================== UPLOAD BUTTONS ====================
+
+        // Video upload button
+        btnUploadVideo.addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.multiple = true;
+            input.accept = '.mp4,.avi,.mov,.mkv,.webm';
+            input.onchange = async (e) => {
+                for (const file of e.target.files) {
+                    await uploadFileToTrack(file, 'video');
+                }
+            };
+            input.click();
+        });
+
+        // Speech upload button
+        btnUploadSpeech.addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.multiple = true;
+            input.accept = '.mp3,.wav,.aac,.m4a,.flac';
+            input.onchange = async (e) => {
+                for (const file of e.target.files) {
+                    await uploadFileToTrack(file, 'speech');
+                }
+            };
+            input.click();
+        });
+
+        // Music upload button
+        btnUploadMusic.addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.mp3,.wav,.aac,.m4a,.flac';
+            input.onchange = async (e) => {
+                if (e.target.files.length > 0) {
+                    await uploadFileToTrack(e.target.files[0], 'music');
+                }
+            };
+            input.click();
+        });
+
+        // Upload file to specific track
+        async function uploadFileToTrack(file, targetTrack) {
+            const formData = new FormData();
+            formData.append('file', file);
+            showStatus('Uploading ' + file.name + ' to ' + targetTrack + ' track...', 'loading');
+
+            try {
+                const response = await fetch('/upload', { method: 'POST', body: formData });
+                const data = await response.json();
+                if (data.success) {
+                    data.trimStart = 0;
+                    data.trimEnd = 0;
+
+                    if (targetTrack === 'video') {
+                        if (data.type !== 'video') {
+                            showStatus('Error: Please select a video file for the video track', 'error');
+                            return;
+                        }
+                        saveState('Add video clip');  // EXP-011 v4
+                        videoClips.push(data);
+                        showStatus('Added to VIDEO track: ' + data.filename + ' (' + data.duration + 's)', 'success');
+                    } else if (targetTrack === 'speech') {
+                        if (data.type !== 'audio') {
+                            showStatus('Error: Please select an audio file for the speech track', 'error');
+                            return;
+                        }
+                        saveState('Add speech clip');  // EXP-011 v4
+                        data.isSilence = false;
+                        speechClips.push(data);
+                        showStatus('Added to SPEECH track: ' + data.filename + ' (' + data.duration + 's)', 'success');
+                    } else if (targetTrack === 'music') {
+                        if (data.type !== 'audio') {
+                            showStatus('Error: Please select an audio file for the music track', 'error');
+                            return;
+                        }
+                        saveState('Add music clip');  // EXP-011 v4
+                        audioClip = data;
+                        showStatus('Added to MUSIC track: ' + data.filename + ' (' + data.duration + 's)', 'success');
+                    }
+
+                    updatePreviewSelect();
+                    renderTimeline();
+                } else {
+                    showStatus('Error: ' + data.error, 'error');
+                }
+            } catch (err) {
+                showStatus('Upload failed: ' + err.message, 'error');
+            }
+        }
+
+        // ==================== TIMELINE RENDERING ====================
+        function getTrimmedDuration(clip) {
+            return Math.max(0.5, clip.duration - clip.trimStart - clip.trimEnd);
+        }
+
+        function renderTimeline() {
+            const crossfade = parseFloat(document.getElementById('crossfadeDuration').value);
+
+            let totalVideoDuration = 0;
+            if (videoClips.length > 0) {
+                totalVideoDuration = videoClips.reduce((sum, c) => sum + getTrimmedDuration(c), 0);
+                totalVideoDuration -= crossfade * Math.max(0, videoClips.length - 1);
+            }
+
+            const audioDuration = audioClip ? getTrimmedDuration(audioClip) : 0;
+            const maxDuration = Math.max(totalVideoDuration, audioDuration, 30);
+
+            timelineDuration = totalVideoDuration;
+
+            const speechDuration = speechClips.reduce((sum, c) => sum + getTrimmedDuration(c), 0);
+
+            scaleInfo.textContent = `Scale: ${PIXELS_PER_SECOND}px = 1 second | Video: ${totalVideoDuration.toFixed(1)}s | Speech: ${speechDuration.toFixed(1)}s | Music: ${audioDuration.toFixed(1)}s`;
+
+            renderRuler(videoRuler, maxDuration);
+            renderRuler(audioRuler, maxDuration);
+            renderRuler(speechRuler, maxDuration);
+            renderVideoTrack(crossfade);
+            renderAudioTrack();
+            renderSpeechTrack();
+
+            // EXP-014: Enable buttons when ANY media exists (video, speech, or music)
+            exportBtn.disabled = !hasAnyMedia();
+            previewFullBtn.disabled = !hasAnyMedia();
+            fitAudioBtn.disabled = !audioClip || videoClips.length === 0;
+            previewSection.style.display = hasAnyMedia() ? 'block' : 'none';
+
+            updateTrimInfo();
+            updateGlobalPlayhead();
+        }
+
+        function renderVideoTrack(crossfade) {
+            videoTrack.innerHTML = '';
+            const maxDuration = Math.max(
+                videoClips.reduce((sum, c) => sum + getTrimmedDuration(c), 0) - crossfade * Math.max(0, videoClips.length - 1),
+                audioClip ? getTrimmedDuration(audioClip) : 0,
+                30
+            );
+            videoTrack.style.width = (maxDuration * PIXELS_PER_SECOND) + 'px';
+
+            let currentPos = 0;
+            videoClips.forEach((clip, index) => {
+                const trimmedDuration = getTrimmedDuration(clip);
+                const trimmedWidth = trimmedDuration * PIXELS_PER_SECOND;
+
+                if (index > 0 && crossfade > 0) {
+                    const xfadeWidth = crossfade * PIXELS_PER_SECOND;
+                    const zone = document.createElement('div');
+                    zone.className = 'crossfade-zone';
+                    zone.style.left = (currentPos - xfadeWidth) + 'px';
+                    zone.style.width = xfadeWidth + 'px';
+                    zone.title = `Crossfade: ${crossfade}s`;
+                    videoTrack.appendChild(zone);
+                }
+
+                if (clip.trimStart > 0) {
+                    const ghost = document.createElement('div');
+                    ghost.className = 'trim-ghost';
+                    ghost.style.left = (currentPos - clip.trimStart * PIXELS_PER_SECOND) + 'px';
+                    ghost.style.width = (clip.trimStart * PIXELS_PER_SECOND) + 'px';
+                    ghost.title = `Trimmed: ${clip.trimStart.toFixed(1)}s from start`;
+                    videoTrack.appendChild(ghost);
+                }
+
+                const div = createClipElement(clip, index, 'video', currentPos, trimmedWidth);
+                videoTrack.appendChild(div);
+
+                if (clip.trimEnd > 0) {
+                    const ghost = document.createElement('div');
+                    ghost.className = 'trim-ghost';
+                    ghost.style.left = (currentPos + trimmedWidth) + 'px';
+                    ghost.style.width = (clip.trimEnd * PIXELS_PER_SECOND) + 'px';
+                    ghost.title = `Trimmed: ${clip.trimEnd.toFixed(1)}s from end`;
+                    videoTrack.appendChild(ghost);
+                }
+
+                currentPos += trimmedWidth;
+                if (index < videoClips.length - 1) {
+                    currentPos -= crossfade * PIXELS_PER_SECOND;
+                }
+            });
+            // EXP-011 FIX: Removed old playhead creation code here
+            // The global playhead (#globalPlayhead) is now the only playhead
+        }
+
+        function renderAudioTrack() {
+            audioTrack.innerHTML = '';
+            const musicDuration = getMusicDuration();
+            const maxDuration = Math.max(
+                videoClips.reduce((sum, c) => sum + getTrimmedDuration(c), 0),
+                musicDuration,
+                speechClips.reduce((sum, c) => sum + getTrimmedDuration(c), 0),
+                30
+            );
+            audioTrack.style.width = (maxDuration * PIXELS_PER_SECOND) + 'px';
+
+            // Render musicClips array (EXP-010)
+            if (musicClips.length > 0) {
+                let currentPos = 0;
+                musicClips.forEach((clip, index) => {
+                    const trimmedDuration = getTrimmedDuration(clip);
+                    const trimmedWidth = trimmedDuration * PIXELS_PER_SECOND;
+
+                    const type = clip.isSilence ? 'silence' : 'audio';
+                    const div = createClipElement(clip, index, type, currentPos, trimmedWidth);
+                    audioTrack.appendChild(div);
+
+                    currentPos += trimmedWidth;
+                });
+            }
+            // Fallback to legacy single audioClip
+            else if (audioClip) {
+                const trimmedDuration = getTrimmedDuration(audioClip);
+                const trimmedWidth = trimmedDuration * PIXELS_PER_SECOND;
+
+                if (audioClip.trimStart > 0) {
+                    const ghost = document.createElement('div');
+                    ghost.className = 'trim-ghost';
+                    ghost.style.left = (-audioClip.trimStart * PIXELS_PER_SECOND) + 'px';
+                    ghost.style.width = (audioClip.trimStart * PIXELS_PER_SECOND) + 'px';
+                    ghost.title = `Trimmed: ${audioClip.trimStart.toFixed(1)}s from start`;
+                    audioTrack.appendChild(ghost);
+                }
+
+                const div = createClipElement(audioClip, 0, 'audio', 0, trimmedWidth);
+                audioTrack.appendChild(div);
+
+                if (audioClip.trimEnd > 0) {
+                    const ghost = document.createElement('div');
+                    ghost.className = 'trim-ghost';
+                    ghost.style.left = trimmedWidth + 'px';
+                    ghost.style.width = (audioClip.trimEnd * PIXELS_PER_SECOND) + 'px';
+                    ghost.title = `Trimmed: ${audioClip.trimEnd.toFixed(1)}s from end`;
+                    audioTrack.appendChild(ghost);
+                }
+            }
+        }
+
+        // Helper: Get total music duration (from musicClips or audioClip)
+        function getMusicDuration() {
+            if (musicClips.length > 0) {
+                return musicClips.reduce((sum, c) => sum + getTrimmedDuration(c), 0);
+            }
+            return audioClip ? getTrimmedDuration(audioClip) : 0;
+        }
+
+        function renderSpeechTrack() {
+            speechTrack.innerHTML = '';
+            const maxDuration = Math.max(
+                videoClips.reduce((sum, c) => sum + getTrimmedDuration(c), 0),
+                getMusicDuration(),
+                speechClips.reduce((sum, c) => sum + getTrimmedDuration(c), 0),
+                30
+            );
+            speechTrack.style.width = (maxDuration * PIXELS_PER_SECOND) + 'px';
+
+            let currentPos = 0;
+            speechClips.forEach((clip, index) => {
+                const trimmedDuration = getTrimmedDuration(clip);
+                const trimmedWidth = trimmedDuration * PIXELS_PER_SECOND;
+
+                const type = clip.isSilence ? 'silence' : 'speech';
+                const div = createClipElement(clip, index, type, currentPos, trimmedWidth);
+                speechTrack.appendChild(div);
+
+                currentPos += trimmedWidth;
+            });
+        }
+
+        function createClipElement(clip, index, type, leftPos, width) {
+            const isSelected = selectedClip && selectedClip.type === type && selectedClip.index === index;
+            const trimmedDuration = getTrimmedDuration(clip);
+
+            const div = document.createElement('div');
+            div.className = `timeline-clip ${type}` + (isSelected ? ' selected' : '');
+            div.style.left = leftPos + 'px';
+            div.style.width = width + 'px';
+            div.dataset.type = type;
+            div.dataset.index = index;
+
+            const content = document.createElement('div');
+            content.className = 'clip-content';
+            content.innerHTML = `
+                <div class="clip-info">
+                    <span class="clip-name">${clip.isSilence ? clip.filename : clip.filename.substring(0, 12) + '...'}</span>
+                    <span class="clip-duration">${clip.isSilence ? '' : trimmedDuration.toFixed(1) + 's / ' + clip.duration.toFixed(1) + 's'}</span>
+                </div>
+            `;
+            div.appendChild(content);
+
+            const leftHandle = document.createElement('div');
+            leftHandle.className = 'trim-handle trim-handle-left';
+            leftHandle.dataset.handle = 'left';
+            leftHandle.dataset.type = type;
+            leftHandle.dataset.index = index;
+            div.appendChild(leftHandle);
+
+            const rightHandle = document.createElement('div');
+            rightHandle.className = 'trim-handle trim-handle-right';
+            rightHandle.dataset.handle = 'right';
+            rightHandle.dataset.type = type;
+            rightHandle.dataset.index = index;
+            div.appendChild(rightHandle);
+
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'remove-btn';
+            removeBtn.textContent = '×';
+            removeBtn.onclick = (e) => {
+                e.stopPropagation();
+                if (type === 'video') removeVideo(index);
+                else if (type === 'speech' || type === 'silence') removeSpeech(index);
+                // EXP-011 v3 FIX: Use removeMusicClip with index instead of removeAudio
+                else if (type === 'audio') removeMusicClip(index);
+            };
+            div.appendChild(removeBtn);
+
+            div.onclick = (e) => {
+                if (!e.target.classList.contains('trim-handle') && !e.target.classList.contains('remove-btn')) {
+                    selectClip(type, index);
+                }
+            };
+
+            // Setup drag-and-drop for video clips
+            if (type === 'video') {
+                setupClipDragAndDrop(div, index);
+            }
+
+            return div;
+        }
+
+        function renderRuler(ruler, duration) {
+            ruler.innerHTML = '';
+            ruler.style.width = (duration * PIXELS_PER_SECOND) + 'px';
+
+            for (let s = 0; s <= duration; s++) {
+                const marker = document.createElement('div');
+                marker.className = 'time-marker' + (s % 5 === 0 ? ' major' : '');
+                marker.style.left = (s * PIXELS_PER_SECOND) + 'px';
+                // EXP-016: Show time in M:SS format instead of just seconds
+                if (s % 5 === 0) marker.textContent = formatTime(s);
+                ruler.appendChild(marker);
+            }
+        }
+
+        // ==================== FEATURE 1: CLICKABLE TIMELINE ====================
+        videoTrack.addEventListener('click', (e) => {
+            // Don't seek if clicking on a clip, handle, or playhead
+            if (e.target.closest('.timeline-clip') || e.target.closest('.playhead')) return;
+
+            const rect = videoTrack.getBoundingClientRect();
+            const clickX = e.clientX - rect.left + videoTrack.scrollLeft;
+            const clickTime = clickX / PIXELS_PER_SECOND;
+
+            seekToTime(clickTime);
+        });
+
+        videoRuler.addEventListener('click', (e) => {
+            const rect = videoRuler.getBoundingClientRect();
+            const clickX = e.clientX - rect.left + videoRuler.scrollLeft;
+            const clickTime = clickX / PIXELS_PER_SECOND;
+
+            seekToTime(clickTime);
+        });
+
+        function seekToTime(time) {
+            const duration = videoPreview.duration || timelineDuration || 1;
+            const clampedTime = Math.max(0, Math.min(time, duration));
+
+            videoPreview.currentTime = clampedTime;
+            updatePlayheadPosition();
+
+            console.log(`[Seek] Clicked at ${clampedTime.toFixed(2)}s`);
+        }
+
+        // ==================== FEATURE 2: GLOBAL DRAGGABLE PLAYHEAD ====================
+        const globalPlayhead = document.getElementById('globalPlayhead');
+        const globalPlayheadTime = document.getElementById('globalPlayheadTime');
+        const playheadContextMenu = document.getElementById('playheadContextMenu');
+        let playheadPosition = 0; // Current playhead position in seconds
+
+        // Calculate max duration across all tracks
+        function getMaxDuration() {
+            const crossfade = parseFloat(document.getElementById('crossfadeDuration').value) || 0;
+            let videoDur = 0;
+            if (videoClips.length > 0) {
+                videoDur = videoClips.reduce((sum, c) => sum + getTrimmedDuration(c), 0);
+                videoDur -= crossfade * Math.max(0, videoClips.length - 1);
+            }
+            const speechDur = speechClips.reduce((sum, c) => sum + getTrimmedDuration(c), 0);
+            const musicDur = getMusicDuration();
+            return Math.max(videoDur, speechDur, musicDur, 1);
+        }
+
+        // EXP-016 v2: Auto-scroll to keep playhead visible
+        function ensurePlayheadVisible() {
+            const playheadLeft = parseFloat(globalPlayhead.style.left) || 0;
+            const trackScrolls = document.querySelectorAll('.track-scroll');
+
+            if (trackScrolls.length === 0) return;
+
+            // Use first track-scroll as reference for viewport width
+            const firstScroll = trackScrolls[0];
+            const viewportWidth = firstScroll.clientWidth;
+            const currentScroll = firstScroll.scrollLeft;
+
+            // 20% margin from edges
+            const margin = viewportWidth * 0.2;
+
+            // Calculate visible range
+            const visibleLeft = currentScroll + margin;
+            const visibleRight = currentScroll + viewportWidth - margin;
+
+            let newScrollLeft = null;
+
+            // If playhead is too far right (beyond visible area)
+            if (playheadLeft > visibleRight) {
+                newScrollLeft = playheadLeft - viewportWidth + margin;
+            }
+            // If playhead is too far left (before visible area)
+            else if (playheadLeft < visibleLeft) {
+                newScrollLeft = Math.max(0, playheadLeft - margin);
+            }
+
+            // Scroll all track-scroll elements together
+            if (newScrollLeft !== null) {
+                trackScrolls.forEach(scroll => {
+                    scroll.scrollTo({
+                        left: newScrollLeft,
+                        behavior: 'smooth'
+                    });
+                });
+            }
+        }
+
+        // EXP-016 v2: Synchronize scroll between all tracks
+        (function setupScrollSync() {
+            const trackScrolls = document.querySelectorAll('.track-scroll');
+            let isScrolling = false;
+
+            trackScrolls.forEach(scroll => {
+                scroll.addEventListener('scroll', () => {
+                    if (isScrolling) return;
+                    isScrolling = true;
+
+                    const scrollLeft = scroll.scrollLeft;
+                    trackScrolls.forEach(otherScroll => {
+                        if (otherScroll !== scroll) {
+                            otherScroll.scrollLeft = scrollLeft;
+                        }
+                    });
+
+                    // Reset flag after a short delay
+                    setTimeout(() => { isScrolling = false; }, 10);
+                });
+            });
+        })();
+
+        // Update global playhead position
+        function updateGlobalPlayhead() {
+            const maxDuration = getMaxDuration();
+            const maxLeft = maxDuration * PIXELS_PER_SECOND;
+            const left = Math.min(playheadPosition * PIXELS_PER_SECOND, maxLeft);
+            // EXP-011 v2 FIX: Add offset to align with clips inside padded container
+            globalPlayhead.style.left = (left + PLAYHEAD_LEFT_OFFSET) + 'px';
+
+            const mins = Math.floor(playheadPosition / 60);
+            const secs = Math.floor(playheadPosition % 60);
+            globalPlayheadTime.textContent = mins + ':' + secs.toString().padStart(2, '0');
+
+            // EXP-016 v2: Auto-scroll to keep playhead visible
+            ensurePlayheadVisible();
+        }
+
+        // Mousedown on global playhead
+        document.addEventListener('mousedown', (e) => {
+            const playhead = e.target.closest('.global-playhead') || e.target.closest('.global-playhead-hitarea');
+            if (playhead) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                isDraggingPlayhead = true;
+                globalPlayhead.classList.add('dragging');
+
+                playheadDragData = {
+                    startX: e.clientX,
+                    // EXP-011 v2 FIX: Subtract offset when reading current position
+                    startLeft: (parseFloat(globalPlayhead.style.left) || PLAYHEAD_LEFT_OFFSET) - PLAYHEAD_LEFT_OFFSET
+                };
+
+                // Pause video during scrubbing
+                if (!videoPreview.paused) {
+                    videoPreview.pause();
+                    playBtn.textContent = 'Play';
+                }
+
+                return;
+            }
+        });
+
+        // Mousemove for global playhead dragging
+        document.addEventListener('mousemove', (e) => {
+            if (isDraggingPlayhead && playheadDragData) {
+                const deltaX = e.clientX - playheadDragData.startX;
+                let newLeft = playheadDragData.startLeft + deltaX;
+
+                const maxDuration = getMaxDuration();
+                const maxLeft = maxDuration * PIXELS_PER_SECOND;
+                newLeft = Math.max(0, Math.min(newLeft, maxLeft));
+
+                // EXP-011 v2 FIX: Add offset when setting position
+                globalPlayhead.style.left = (newLeft + PLAYHEAD_LEFT_OFFSET) + 'px';
+                playheadPosition = newLeft / PIXELS_PER_SECOND;
+
+                // Update video position for live preview
+                if (videoPreview.src && videoPreview.duration) {
+                    const scaledTime = (playheadPosition / timelineDuration) * videoPreview.duration;
+                    videoPreview.currentTime = Math.min(scaledTime, videoPreview.duration);
+                }
+
+                // Update time label
+                const mins = Math.floor(playheadPosition / 60);
+                const secs = Math.floor(playheadPosition % 60);
+                globalPlayheadTime.textContent = mins + ':' + secs.toString().padStart(2, '0');
+
+                return;
+            }
+        });
+
+        // Mouseup for global playhead
+        document.addEventListener('mouseup', () => {
+            if (isDraggingPlayhead) {
+                globalPlayhead.classList.remove('dragging');
+                isDraggingPlayhead = false;
+                playheadDragData = null;
+            }
+        });
+
+        // ==================== TRACK CONTEXT MENUS (EXP-010) ====================
+
+        // Helper: Hide all track context menus
+        function hideAllTrackMenus() {
+            videoTrackMenu.classList.remove('visible');
+            speechTrackMenu.classList.remove('visible');
+            musicTrackMenu.classList.remove('visible');
+            activeTrackMenu = null;
+        }
+
+        // Right-click on Video Track -> show video context menu
+        videoTrack.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            hideAllTrackMenus();
+
+            videoTrackMenu.style.left = e.clientX + 'px';
+            videoTrackMenu.style.top = e.clientY + 'px';
+            videoTrackMenu.classList.add('visible');
+            activeTrackMenu = videoTrackMenu;
+        });
+
+        // Right-click on Speech Track -> show speech context menu
+        speechTrack.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            hideAllTrackMenus();
+
+            speechTrackMenu.style.left = e.clientX + 'px';
+            speechTrackMenu.style.top = e.clientY + 'px';
+            speechTrackMenu.classList.add('visible');
+            activeTrackMenu = speechTrackMenu;
+        });
+
+        // Right-click on Music Track -> show music context menu
+        audioTrack.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            hideAllTrackMenus();
+
+            musicTrackMenu.style.left = e.clientX + 'px';
+            musicTrackMenu.style.top = e.clientY + 'px';
+            musicTrackMenu.classList.add('visible');
+            activeTrackMenu = musicTrackMenu;
+        });
+
+        // Hide track context menus on click elsewhere
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.track-context-menu')) {
+                hideAllTrackMenus();
+            }
+        });
+
+        // VIDEO TRACK: Split at playhead
+        document.getElementById('menuVideoSplit').addEventListener('click', () => {
+            hideAllTrackMenus();
+            splitVideoAtPlayhead();
+        });
+
+        // SPEECH TRACK: Insert Silence at playhead
+        document.getElementById('menuSpeechInsertSilence').addEventListener('click', () => {
+            hideAllTrackMenus();
+            contextMenuTarget = { track: 'speech', clickTime: playheadPosition };
+            silenceDialog.classList.add('visible');
+            silenceDurationInput.value = '2.0';
+            silenceDurationInput.focus();
+        });
+
+        // SPEECH TRACK: Split at playhead
+        document.getElementById('menuSpeechSplit').addEventListener('click', () => {
+            hideAllTrackMenus();
+            splitSpeechAtPlayhead();
+        });
+
+        // MUSIC TRACK: Insert Silence at playhead
+        document.getElementById('menuMusicInsertSilence').addEventListener('click', () => {
+            hideAllTrackMenus();
+            contextMenuTarget = { track: 'music', clickTime: playheadPosition };
+            silenceDialog.classList.add('visible');
+            silenceDurationInput.value = '2.0';
+            silenceDurationInput.focus();
+        });
+
+        // MUSIC TRACK: Split at playhead
+        document.getElementById('menuMusicSplit').addEventListener('click', () => {
+            hideAllTrackMenus();
+            splitMusicAtPlayhead();
+        });
+
+        // Legacy: Right-click on global playhead (disabled - use track menus instead)
+        globalPlayhead.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            // No action - use track context menus instead
+        });
+
+        // ==================== TRACK-SPECIFIC SPLIT FUNCTIONS (EXP-010) ====================
+
+        // Split VIDEO clip at playhead position
+        function splitVideoAtPlayhead() {
+            saveState('Split video');  // EXP-011 v4
+            const splitTime = playheadPosition;
+            let currentTime = 0;
+            const crossfade = parseFloat(document.getElementById('crossfadeDuration').value) || 0;
+
+            for (let i = 0; i < videoClips.length; i++) {
+                const clip = videoClips[i];
+                const clipDur = getTrimmedDuration(clip);
+                const clipStart = currentTime;
+                const clipEnd = currentTime + clipDur;
+
+                if (splitTime > clipStart && splitTime < clipEnd) {
+                    const splitOffset = splitTime - clipStart;
+                    const originalTrimEnd = clip.trimEnd;
+
+                    // First part: trim end increased
+                    clip.trimEnd = clip.duration - clip.trimStart - splitOffset;
+
+                    // Second part: new clip with trim start
+                    const secondClip = { ...clip };
+                    secondClip.trimStart = clip.trimStart + splitOffset;
+                    secondClip.trimEnd = originalTrimEnd;
+
+                    videoClips.splice(i + 1, 0, secondClip);
+
+                    showStatus(`Split video at playhead (${splitTime.toFixed(1)}s)`, 'success');
+                    renderTimeline();
+                    updatePreviewSelect();
+                    return;
+                }
+
+                currentTime += clipDur;
+                if (i < videoClips.length - 1) {
+                    currentTime -= crossfade;
+                }
+            }
+
+            showStatus('No video clip at playhead position', 'error');
+        }
+
+        // Split SPEECH clip at playhead position
+        // EXP-011 v2 FIX: Use getTrimmedDuration for ALL clips (including silence) to match rendering
+        function splitSpeechAtPlayhead() {
+            saveState('Split speech');  // EXP-011 v4
+            const splitTime = playheadPosition;
+            let currentTime = 0;
+
+            for (let i = 0; i < speechClips.length; i++) {
+                const clip = speechClips[i];
+                const clipDur = getTrimmedDuration(clip);  // Use same calculation as rendering
+
+                if (clip.isSilence) {
+                    currentTime += clipDur;
+                    continue;
+                }
+                const clipStart = currentTime;
+                const clipEnd = currentTime + clipDur;
+
+                if (splitTime > clipStart && splitTime < clipEnd) {
+                    const splitOffset = splitTime - clipStart;
+                    const originalTrimEnd = clip.trimEnd;
+
+                    // First part
+                    clip.trimEnd = clip.duration - clip.trimStart - splitOffset;
+
+                    // Second part
+                    const secondClip = { ...clip };
+                    secondClip.trimStart = clip.trimStart + splitOffset;
+                    secondClip.trimEnd = originalTrimEnd;
+
+                    speechClips.splice(i + 1, 0, secondClip);
+
+                    showStatus(`Split speech at playhead (${splitTime.toFixed(1)}s)`, 'success');
+                    renderTimeline();
+                    return;
+                }
+
+                currentTime += clipDur;
+            }
+
+            showStatus('No speech clip at playhead position', 'error');
+        }
+
+        // Split MUSIC clip at playhead position
+        // EXP-011 v2 FIX: Use getTrimmedDuration for ALL clips (including silence) to match rendering
+        function splitMusicAtPlayhead() {
+            saveState('Split music');  // EXP-011 v4
+            const splitTime = playheadPosition;
+
+            // Check musicClips first (if converted to array)
+            if (musicClips.length > 0) {
+                let currentTime = 0;
+                for (let i = 0; i < musicClips.length; i++) {
+                    const clip = musicClips[i];
+                    const clipDur = getTrimmedDuration(clip);  // Use same calculation as rendering
+
+                    if (clip.isSilence) {
+                        currentTime += clipDur;
+                        continue;
+                    }
+                    const clipStart = currentTime;
+                    const clipEnd = currentTime + clipDur;
+
+                    if (splitTime > clipStart && splitTime < clipEnd) {
+                        const splitOffset = splitTime - clipStart;
+                        const originalTrimEnd = clip.trimEnd;
+
+                        clip.trimEnd = clip.duration - clip.trimStart - splitOffset;
+
+                        const secondClip = { ...clip };
+                        secondClip.trimStart = clip.trimStart + splitOffset;
+                        secondClip.trimEnd = originalTrimEnd;
+
+                        musicClips.splice(i + 1, 0, secondClip);
+
+                        showStatus(`Split music at playhead (${splitTime.toFixed(1)}s)`, 'success');
+                        renderTimeline();
+                        return;
+                    }
+
+                    currentTime += clipDur;
+                }
+            }
+            // Fallback to single audioClip
+            else if (audioClip) {
+                const clipDur = getTrimmedDuration(audioClip);
+                if (splitTime > 0 && splitTime < clipDur) {
+                    const splitOffset = splitTime;
+                    const originalTrimEnd = audioClip.trimEnd;
+
+                    // Convert to musicClips array with split
+                    const firstClip = { ...audioClip };
+                    firstClip.trimEnd = audioClip.duration - audioClip.trimStart - splitOffset;
+
+                    const secondClip = { ...audioClip };
+                    secondClip.trimStart = audioClip.trimStart + splitOffset;
+                    secondClip.trimEnd = originalTrimEnd;
+
+                    musicClips = [firstClip, secondClip];
+                    audioClip = null;  // Clear legacy single clip
+
+                    showStatus(`Split music at playhead (${splitTime.toFixed(1)}s)`, 'success');
+                    renderTimeline();
+                    return;
+                }
+            }
+
+            showStatus('No music clip at playhead position', 'error');
+        }
+
+        // ==================== FEATURE 3: REORDER CLIPS (v5 - Pure Mouse Events) ====================
+        // Simple and reliable mouse-based reordering
+
+        let reorderDrag = null;
+
+        // Helper: Get clip positions
+        function getClipPositions() {
+            const crossfade = parseFloat(document.getElementById('crossfadeDuration').value) || 0;
+            let positions = [];
+            let currentX = 0;
+
+            for (let i = 0; i < videoClips.length; i++) {
+                const clipWidth = getTrimmedDuration(videoClips[i]) * PIXELS_PER_SECOND;
+                positions.push({
+                    index: i,
+                    left: currentX,
+                    right: currentX + clipWidth,
+                    center: currentX + clipWidth / 2,
+                    width: clipWidth
+                });
+                currentX += clipWidth;
+                if (i < videoClips.length - 1) {
+                    currentX -= crossfade * PIXELS_PER_SECOND;
+                }
+            }
+            return positions;
+        }
+
+        // Helper: Find target index based on X position
+        function findTargetIndex(mouseX, draggedIndex) {
+            const trackRect = videoTrack.getBoundingClientRect();
+            const relativeX = mouseX - trackRect.left + videoTrack.scrollLeft;
+            const positions = getClipPositions();
+
+            // Find where to insert
+            for (let i = 0; i < positions.length; i++) {
+                if (i === draggedIndex) continue;
+                if (relativeX < positions[i].center) {
+                    return i;
+                }
+            }
+            return videoClips.length; // Insert at end
+        }
+
+        // Mouse down on clip - start potential drag
+        document.addEventListener('mousedown', (e) => {
+            const clipEl = e.target.closest('.timeline-clip.video');
+            console.log('MOUSEDOWN - target:', e.target.tagName, e.target.className, 'clipEl:', clipEl ? 'found' : 'null');
+
+            if (!clipEl) return;
+            if (e.target.closest('.trim-handle') || e.target.closest('.remove-btn')) {
+                console.log('MOUSEDOWN - blocked by handle/remove');
+                return;
+            }
+
+            const index = parseInt(clipEl.dataset.index);
+            const trackRect = videoTrack.getBoundingClientRect();
+
+            reorderDrag = {
+                clipEl: clipEl,
+                index: index,
+                startX: e.clientX,
+                startY: e.clientY,
+                clipOriginalLeft: parseFloat(clipEl.style.left) || 0,
+                trackLeft: trackRect.left,
+                moved: false
+            };
+
+            console.log('MOUSEDOWN - reorderDrag initialized, index:', index, 'startX:', e.clientX);
+            e.preventDefault();
+        });
+
+        // Mouse move - drag clip if active
+        document.addEventListener('mousemove', (e) => {
+            if (!reorderDrag) return;
+
+            const deltaX = e.clientX - reorderDrag.startX;
+
+            // Start drag after 8px movement
+            if (!reorderDrag.moved && Math.abs(deltaX) > 8) {
+                reorderDrag.moved = true;
+                reorderDrag.clipEl.classList.add('dragging');
+                reorderDrag.clipEl.style.zIndex = '1000';
+                isDraggingClip = true;
+                console.log('MOUSEMOVE - drag started! deltaX:', deltaX);
+            }
+
+            if (!reorderDrag.moved) return;
+
+            // Move clip visually
+            const newLeft = reorderDrag.clipOriginalLeft + deltaX;
+            reorderDrag.clipEl.style.left = newLeft + 'px';
+
+            // Find and show target position
+            const targetIndex = findTargetIndex(e.clientX, reorderDrag.index);
+
+            // Update visual indicators
+            document.querySelectorAll('.timeline-clip.video').forEach((el, i) => {
+                el.classList.remove('drag-over-left', 'drag-over-right');
+                const idx = parseInt(el.dataset.index);
+                if (idx === targetIndex && idx !== reorderDrag.index) {
+                    el.classList.add('drag-over-left');
+                } else if (idx === targetIndex - 1 && targetIndex === videoClips.length) {
+                    el.classList.add('drag-over-right');
+                }
+            });
+        });
+
+        // Mouse up - complete drag
+        document.addEventListener('mouseup', (e) => {
+            console.log('MOUSEUP - reorderDrag:', reorderDrag ? 'active' : 'null', 'moved:', reorderDrag?.moved);
+            if (!reorderDrag) return;
+
+            if (reorderDrag.moved) {
+                const fromIndex = reorderDrag.index;
+                const toIndex = findTargetIndex(e.clientX, fromIndex);
+
+                console.log('MOUSEUP - fromIndex:', fromIndex, 'toIndex:', toIndex);
+
+                // Clear styling
+                reorderDrag.clipEl.classList.remove('dragging');
+                reorderDrag.clipEl.style.zIndex = '';
+                document.querySelectorAll('.timeline-clip').forEach(el => {
+                    el.classList.remove('drag-over-left', 'drag-over-right');
+                });
+
+                // Calculate the actual new index after removal
+                // toIndex is where to INSERT, but after splice, indices shift
+                let insertAt = toIndex;
+                if (fromIndex < toIndex) {
+                    insertAt = toIndex - 1;
+                }
+
+                console.log('MOUSEUP - insertAt:', insertAt, 'will reorder:', insertAt !== fromIndex);
+
+                // Perform reorder if position actually changes
+                if (insertAt !== fromIndex) {
+                    saveState('Reorder clips');  // EXP-011 v4
+                    // Remove clip from old position
+                    const clip = videoClips.splice(fromIndex, 1)[0];
+
+                    // Insert at new position
+                    videoClips.splice(insertAt, 0, clip);
+
+                    console.log('Reorder DONE: from', fromIndex, 'to', insertAt);
+                    console.log('New order:', videoClips.map(c => c.filename));
+
+                    showStatus(`Klipp flyttat fran position ${fromIndex + 1} till ${insertAt + 1}`, 'success');
+                } else {
+                    console.log('No reorder needed - same position');
+                }
+
+                // Re-render timeline (this will place clips at correct positions)
+                renderTimeline();
+                updatePreviewSelect();
+                isDraggingClip = false;
+            }
+
+            reorderDrag = null;
+        });
+
+        // Legacy function for compatibility
+        function setupClipDragAndDrop(clipEl, index) {
+            // No longer using HTML5 drag-and-drop
+            // Mouse events are handled at document level
+        }
+
+        // ==================== DEBUG: Test reorder function ====================
+        function testReorder() {
+            const debugOutput = document.getElementById('debugOutput');
+            if (videoClips.length < 2) {
+                debugOutput.textContent = 'Need at least 2 clips to test!';
+                debugOutput.style.color = '#f00';
+                return;
+            }
+
+            const beforeOrder = videoClips.map(c => c.filename).join(', ');
+
+            // Swap first two clips using the same logic as drag-and-drop
+            const fromIndex = 0;
+            const toIndex = 2; // Move clip 0 to position after clip 1
+
+            const clip = videoClips.splice(fromIndex, 1)[0];
+            let insertIndex = toIndex;
+            if (fromIndex < toIndex) {
+                insertIndex = toIndex - 1;
+            }
+            videoClips.splice(insertIndex, 0, clip);
+
+            renderTimeline();
+            updatePreviewSelect();
+
+            const afterOrder = videoClips.map(c => c.filename).join(', ');
+
+            debugOutput.innerHTML = `<br>Before: ${beforeOrder}<br>After: ${afterOrder}`;
+            debugOutput.style.color = '#0f0';
+
+            // Verify the change persisted
+            setTimeout(() => {
+                const currentOrder = videoClips.map(c => c.filename).join(', ');
+                if (currentOrder === afterOrder) {
+                    debugOutput.innerHTML += `<br><span style="color:#0f0">SUCCESS: Order persisted after 1 second!</span>`;
+                } else {
+                    debugOutput.innerHTML += `<br><span style="color:#f00">FAILED: Order reverted to: ${currentOrder}</span>`;
+                }
+            }, 1000);
+
+            showStatus('Test: Moved first clip to second position', 'success');
+        }
+
+        // Programmatic mouse drag simulation test (v5 - uses MouseEvents)
+        async function simulateDragDrop() {
+            const debugOutput = document.getElementById('debugOutput');
+            if (videoClips.length < 2) {
+                debugOutput.textContent = 'Need at least 2 clips to simulate!';
+                return;
+            }
+
+            const clips = document.querySelectorAll('.timeline-clip.video');
+            if (clips.length < 2) {
+                debugOutput.textContent = 'No clip elements found!';
+                return;
+            }
+
+            const clip0 = clips[0];
+            const clip1 = clips[1];
+
+            const beforeOrder = videoClips.map(c => c.filename).join(', ');
+            debugOutput.innerHTML = `Simulating MOUSE drag from clip 0 to after clip 1...<br>Before: ${beforeOrder}`;
+
+            // Get positions
+            const clip0Rect = clip0.getBoundingClientRect();
+            const clip1Rect = clip1.getBoundingClientRect();
+
+            const startX = clip0Rect.left + clip0Rect.width / 2;
+            const startY = clip0Rect.top + clip0Rect.height / 2;
+            const endX = clip1Rect.right + 30; // After clip 1
+            const endY = startY;
+
+            debugOutput.innerHTML += `<br>Start: (${startX.toFixed(0)}, ${startY.toFixed(0)}) -> End: (${endX.toFixed(0)}, ${endY.toFixed(0)})`;
+
+            // Simulate mousedown on clip 0
+            const mouseDownEvent = new MouseEvent('mousedown', {
+                bubbles: true,
+                cancelable: true,
+                clientX: startX,
+                clientY: startY,
+                button: 0
+            });
+            clip0.dispatchEvent(mouseDownEvent);
+
+            await new Promise(r => setTimeout(r, 50));
+
+            // Simulate mousemove in steps (to trigger drag detection)
+            const steps = 10;
+            for (let i = 1; i <= steps; i++) {
+                const x = startX + (endX - startX) * i / steps;
+                const y = startY;
+
+                const mouseMoveEvent = new MouseEvent('mousemove', {
+                    bubbles: true,
+                    cancelable: true,
+                    clientX: x,
+                    clientY: y
+                });
+                document.dispatchEvent(mouseMoveEvent);
+
+                await new Promise(r => setTimeout(r, 20));
+            }
+
+            debugOutput.innerHTML += `<br>Drag state after move: reorderDrag=${reorderDrag ? 'active' : 'null'}, moved=${reorderDrag?.moved}`;
+
+            await new Promise(r => setTimeout(r, 50));
+
+            // Simulate mouseup
+            const mouseUpEvent = new MouseEvent('mouseup', {
+                bubbles: true,
+                cancelable: true,
+                clientX: endX,
+                clientY: endY,
+                button: 0
+            });
+            document.dispatchEvent(mouseUpEvent);
+
+            await new Promise(r => setTimeout(r, 100));
+
+            const afterOrder = videoClips.map(c => c.filename).join(', ');
+            debugOutput.innerHTML += `<br>After simulation: ${afterOrder}`;
+
+            if (beforeOrder !== afterOrder) {
+                debugOutput.innerHTML += `<br><span style="color:#0f0">MOUSE drag simulation WORKED!</span>`;
+            } else {
+                debugOutput.innerHTML += `<br><span style="color:#f00">MOUSE drag simulation FAILED - no change</span>`;
+            }
+        }
+
+        // ==================== FEATURE 4: AUTO-FIT AUDIO ====================
+        fitAudioBtn.addEventListener('click', () => {
+            if (!audioClip || videoClips.length === 0) return;
+
+            const crossfade = parseFloat(document.getElementById('crossfadeDuration').value);
+            let totalVideoDuration = videoClips.reduce((sum, c) => sum + getTrimmedDuration(c), 0);
+            totalVideoDuration -= crossfade * Math.max(0, videoClips.length - 1);
+
+            const audioDuration = audioClip.duration - audioClip.trimStart;
+
+            if (audioDuration > totalVideoDuration) {
+                // Audio is longer - trim the end to match video
+                audioClip.trimEnd = audioClip.duration - audioClip.trimStart - totalVideoDuration;
+                showStatus(`Audio trimmed to ${totalVideoDuration.toFixed(1)}s to match video`, 'success');
+            } else if (audioDuration < totalVideoDuration) {
+                // Audio is shorter - just notify (can't stretch without re-encoding)
+                showStatus(`Audio is ${audioDuration.toFixed(1)}s, video is ${totalVideoDuration.toFixed(1)}s. Audio will end early.`, 'error');
+            } else {
+                showStatus('Audio already matches video length!', 'success');
+            }
+
+            renderTimeline();
+        });
+
+        // ==================== TRIM HANDLES ====================
+        document.addEventListener('mousedown', (e) => {
+            const handle = e.target.closest('.trim-handle');
+            if (!handle) return;
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            const type = handle.dataset.type;
+            const index = parseInt(handle.dataset.index);
+            const handleSide = handle.dataset.handle;
+            const clip = type === 'video' ? videoClips[index] : audioClip;
+
+            saveState('Trim clip');  // EXP-011 v4
+            isDraggingTrim = true;
+            trimDragData = {
+                type,
+                index,
+                handle: handleSide,
+                startX: e.clientX,
+                startTrimStart: clip.trimStart,
+                startTrimEnd: clip.trimEnd,
+                duration: clip.duration
+            };
+
+            handle.classList.add('dragging');
+            selectClip(type, index);
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDraggingTrim || !trimDragData) return;
+
+            const deltaX = e.clientX - trimDragData.startX;
+            const deltaSeconds = deltaX / PIXELS_PER_SECOND;
+
+            const clip = trimDragData.type === 'video'
+                ? videoClips[trimDragData.index]
+                : audioClip;
+
+            const minDuration = 0.5;
+            const maxTrim = trimDragData.duration - minDuration;
+
+            if (trimDragData.handle === 'left') {
+                let newTrimStart = trimDragData.startTrimStart + deltaSeconds;
+                newTrimStart = Math.max(0, Math.min(maxTrim - clip.trimEnd, newTrimStart));
+                clip.trimStart = newTrimStart;
+            } else {
+                let newTrimEnd = trimDragData.startTrimEnd - deltaSeconds;
+                newTrimEnd = Math.max(0, Math.min(maxTrim - clip.trimStart, newTrimEnd));
+                clip.trimEnd = newTrimEnd;
+            }
+
+            renderTimeline();
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isDraggingTrim) {
+                document.querySelectorAll('.trim-handle.dragging').forEach(h => h.classList.remove('dragging'));
+                isDraggingTrim = false;
+                trimDragData = null;
+            }
+        });
+
+        // ==================== CLIP SELECTION & PREVIEW ====================
+        function selectClip(type, index) {
+            selectedClip = { type, index };
+
+            if (type === 'video') {
+                const clip = videoClips[index];
+                videoPreview.src = clip.preview_url;
+                videoPreview.currentTime = clip.trimStart;
+                videoPreview.style.display = 'block';
+                audioPreview.style.display = 'none';
+            } else {
+                const clip = audioClip;
+                audioPreview.src = clip.preview_url;
+                audioPreview.currentTime = clip.trimStart;
+                audioPreview.style.display = 'block';
+                videoPreview.style.display = 'none';
+            }
+
+            renderTimeline();
+        }
+
+        function updateTrimInfo() {
+            if (selectedClip) {
+                const clip = selectedClip.type === 'video'
+                    ? videoClips[selectedClip.index]
+                    : audioClip;
+                if (clip) {
+                    const trimmed = getTrimmedDuration(clip);
+                    trimInfo.innerHTML = `
+                        <strong>${selectedClip.type === 'video' ? 'Video' : 'Audio'}:</strong> ${clip.filename}<br>
+                        Original: <span>${clip.duration.toFixed(1)}s</span> |
+                        Trim Start: <span>${clip.trimStart.toFixed(1)}s</span> |
+                        Trim End: <span>${clip.trimEnd.toFixed(1)}s</span> |
+                        Result: <span>${trimmed.toFixed(1)}s</span>
+                    `;
+                    return;
+                }
+            }
+            trimInfo.innerHTML = 'Click a clip to select and trim it';
+        }
+
+        function updatePreviewSelect() {
+            previewSelect.innerHTML = '<option value="">Select clip...</option>';
+            videoClips.forEach((clip, i) => {
+                const opt = document.createElement('option');
+                opt.value = 'video-' + i;
+                opt.textContent = '[V' + (i+1) + '] ' + clip.filename + ' (' + clip.duration + 's)';
+                previewSelect.appendChild(opt);
+            });
+            if (audioClip) {
+                const opt = document.createElement('option');
+                opt.value = 'audio-0';
+                opt.textContent = '[A] ' + audioClip.filename + ' (' + audioClip.duration + 's)';
+                previewSelect.appendChild(opt);
+            }
+        }
+
+        previewSelect.addEventListener('change', () => {
+            const val = previewSelect.value;
+            if (!val) return;
+            const [type, idx] = val.split('-');
+            selectClip(type, parseInt(idx));
+        });
+
+        // ==================== PLAYBACK ====================
+        playBtn.addEventListener('click', () => {
+            const media = selectedClip?.type === 'audio' ? audioPreview : videoPreview;
+            if (media.src) {
+                if (media.paused) {
+                    media.play();
+                    playBtn.textContent = 'Pause';
+                } else {
+                    media.pause();
+                    playBtn.textContent = 'Play';
+                }
+            }
+        });
+
+        videoPreview.addEventListener('ended', () => {
+            playBtn.textContent = 'Play';
+            isPlayingPreview = false;
+            // EXP-011 FIX: Use global playhead
+            globalPlayhead.style.left = '0px';
+            playheadPosition = 0;
+            updateGlobalPlayhead();
+        });
+        audioPreview.addEventListener('ended', () => { playBtn.textContent = 'Play'; });
+
+        videoPreview.addEventListener('play', () => {
+            isPlayingPreview = true;
+            // EXP-011 FIX: Global playhead is always visible, no need to show
+            updatePlayhead();
+        });
+
+        videoPreview.addEventListener('pause', () => {
+            isPlayingPreview = false;
+        });
+
+        videoPreview.addEventListener('timeupdate', () => {
+            if (!isPlayingPreview && !isDraggingPlayhead) {
+                updatePlayheadPosition();
+            }
+        });
+
+        function updatePlayhead() {
+            if (!isPlayingPreview) return;
+            updatePlayheadPosition();
+            requestAnimationFrame(updatePlayhead);
+        }
+
+        function updatePlayheadPosition() {
+            // EXP-011 FIX: Use global playhead instead of old playhead
+            const currentTime = videoPreview.currentTime;
+            const videoDuration = videoPreview.duration || 1;
+
+            let position;
+            if (timelineDuration > 0 && Math.abs(videoDuration - timelineDuration) > 0.1) {
+                position = (currentTime / videoDuration) * timelineDuration * PIXELS_PER_SECOND;
+            } else {
+                position = currentTime * PIXELS_PER_SECOND;
+            }
+
+            const maxPosition = (timelineDuration || videoDuration) * PIXELS_PER_SECOND;
+            const clampedPosition = Math.max(0, Math.min(position, maxPosition));
+
+            // Update global playhead position
+            // EXP-011 v2 FIX: Add offset to align with clips
+            globalPlayhead.style.left = (clampedPosition + PLAYHEAD_LEFT_OFFSET) + 'px';
+            playheadPosition = clampedPosition / PIXELS_PER_SECOND;
+
+            const displayTime = (timelineDuration > 0 && Math.abs(videoDuration - timelineDuration) > 0.1)
+                ? (currentTime / videoDuration) * timelineDuration
+                : currentTime;
+            const mins = Math.floor(displayTime / 60);
+            const secs = Math.floor(displayTime % 60);
+            globalPlayheadTime.textContent = mins + ':' + secs.toString().padStart(2, '0');
+
+            // EXP-016 v2: Auto-scroll to keep playhead visible
+            ensurePlayheadVisible();
+        }
+
+        // ==================== OTHER FUNCTIONS ====================
+        function removeVideo(index) {
+            saveState('Delete video clip');  // EXP-011 v4
+            videoClips.splice(index, 1);
+            if (selectedClip?.type === 'video' && selectedClip.index === index) {
+                selectedClip = null;
+            } else if (selectedClip?.type === 'video' && selectedClip.index > index) {
+                selectedClip.index--;
+            }
+            updatePreviewSelect();
+            renderTimeline();
+        }
+
+        function removeAudio() {
+            saveState('Delete audio');  // EXP-011 v4
+            audioClip = null;
+            if (selectedClip?.type === 'audio') selectedClip = null;
+            updatePreviewSelect();
+            renderTimeline();
+        }
+
+        // EXP-011 v3 FIX: Add function to remove individual music clips
+        function removeMusicClip(index) {
+            saveState('Delete music clip');  // EXP-011 v4
+            if (musicClips.length > 0) {
+                musicClips.splice(index, 1);
+                if (musicClips.length === 0) {
+                    // Also clear audioClip if all music clips are removed
+                    audioClip = null;
+                }
+            } else if (audioClip) {
+                // Fallback: remove single audioClip
+                audioClip = null;
+            }
+            if (selectedClip?.type === 'audio') selectedClip = null;
+            updatePreviewSelect();
+            renderTimeline();
+            showStatus('Removed clip from music track', 'success');
+        }
+
+        function removeSpeech(index) {
+            saveState('Delete speech clip');  // EXP-011 v4
+            speechClips.splice(index, 1);
+            if (selectedSpeechClip === index) {
+                selectedSpeechClip = null;
+            } else if (selectedSpeechClip !== null && selectedSpeechClip > index) {
+                selectedSpeechClip--;
+            }
+            updatePreviewSelect();
+            renderTimeline();
+            showStatus('Removed clip from speech track', 'success');
+        }
+
+        document.getElementById('crossfadeDuration').addEventListener('change', renderTimeline);
+
+        // EXP-011 v4: Undo/Redo button handlers
+        document.getElementById('undoBtn').addEventListener('click', undo);
+        document.getElementById('redoBtn').addEventListener('click', redo);
+
+        document.getElementById('clearBtn').addEventListener('click', async () => {
+            saveState('Clear All');  // EXP-011 v4: Save state before clearing
+            videoClips = [];
+            audioClip = null;
+            musicClips = [];
+            speechClips = [];
+            selectedClip = null;
+            renderTimeline();
+            updatePreviewSelect();
+            updateUndoRedoButtons();
+
+            // EXP-015 FIX: Clear video/audio preview elements
+            videoPreview.src = '';
+            videoPreview.style.display = 'none';
+            audioPreview.src = '';
+            audioPreview.style.display = 'none';
+            previewSection.style.display = 'none';
+            previewFullBtn.disabled = true;
+            exportBtn.disabled = true;
+            playBtn.textContent = 'Play';
+            isPlayingPreview = false;
+
+            await fetch('/clear', { method: 'POST' });
+            showStatus('Cleared', 'success');
+        });
+
+        // PREVIEW FULL (EXP-014: Allow audio-only preview)
+        previewFullBtn.addEventListener('click', async () => {
+            if (!hasAnyMedia()) return;
+            previewFullBtn.disabled = true;
+            previewFullBtn.textContent = 'Generating Preview...';
+            showStatus('Generating full preview (480p for speed)...', 'loading');
+
+            const payload = {
+                videos: videoClips.map(c => ({
+                    ...c,
+                    trimStart: c.trimStart,
+                    trimEnd: c.trimEnd,
+                })),
+                audio: audioClip ? {
+                    ...audioClip,
+                    trimStart: audioClip.trimStart,
+                    trimEnd: audioClip.trimEnd,
+                } : null,
+                speech: speechClips.map(c => ({
+                    ...c,
+                    trimStart: c.trimStart || 0,
+                    trimEnd: c.trimEnd || 0,
+                })),
+                crossfade_duration: parseFloat(document.getElementById('crossfadeDuration').value),
+                crossfade_transition: document.getElementById('crossfadeTransition').value,
+                speech_volume: getSpeechVolumeDecimal(),
+                music_volume: getMusicVolumeDecimal(),
+                audio_fade_in: parseFloat(document.getElementById('audioFadeIn').value),
+                audio_fade_out: parseFloat(document.getElementById('audioFadeOut').value),
+            };
+
+            try {
+                const response = await fetch('/preview-full', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showStatus(`Preview ready: ${data.duration}s`, 'success');
+                    previewDuration = data.duration;
+                    videoPreview.src = data.preview_url;
+                    videoPreview.style.display = 'block';
+                    audioPreview.style.display = 'none';
+                    // EXP-011 FIX: Use global playhead
+                    globalPlayhead.style.left = '0px';
+                    playheadPosition = 0;
+                    updateGlobalPlayhead();
+                    videoPreview.play();
+                    playBtn.textContent = 'Pause';
+                } else {
+                    showStatus('Preview failed: ' + data.error, 'error');
+                }
+            } catch (err) {
+                showStatus('Error: ' + err.message, 'error');
+            }
+            // EXP-014: Re-enable when any media exists
+            previewFullBtn.disabled = !hasAnyMedia();
+            previewFullBtn.textContent = 'Preview Full Composition';
+        });
+
+        // EXPORT (EXP-014: Allow audio-only export)
+        exportBtn.addEventListener('click', async () => {
+            if (!hasAnyMedia()) return;
+            exportBtn.disabled = true;
+            showStatus('Exporting (with trim applied)...', 'loading');
+
+            const payload = {
+                videos: videoClips.map(c => ({
+                    ...c,
+                    trimStart: c.trimStart,
+                    trimEnd: c.trimEnd,
+                })),
+                audio: audioClip ? {
+                    ...audioClip,
+                    trimStart: audioClip.trimStart,
+                    trimEnd: audioClip.trimEnd,
+                } : null,
+                speech: speechClips.map(c => ({
+                    ...c,
+                    trimStart: c.trimStart || 0,
+                    trimEnd: c.trimEnd || 0,
+                })),
+                crossfade_duration: parseFloat(document.getElementById('crossfadeDuration').value),
+                crossfade_transition: document.getElementById('crossfadeTransition').value,
+                speech_volume: getSpeechVolumeDecimal(),
+                music_volume: getMusicVolumeDecimal(),
+                audio_fade_in: parseFloat(document.getElementById('audioFadeIn').value),
+                audio_fade_out: parseFloat(document.getElementById('audioFadeOut').value),
+            };
+
+            try {
+                const response = await fetch('/export', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showStatus(
+                        `Done! ${data.duration}s, ${data.size_mb}MB - ` +
+                        `<a href="${data.download_url}">Download</a> | ` +
+                        `<a href="#" onclick="previewExport('${data.preview_url}')">Preview</a>`,
+                        'success'
+                    );
+                } else {
+                    showStatus('Failed: ' + data.error, 'error');
+                }
+            } catch (err) {
+                showStatus('Error: ' + err.message, 'error');
+            }
+            // EXP-014: Re-enable when any media exists
+            exportBtn.disabled = !hasAnyMedia();
+        });
+
+        function previewExport(url) {
+            videoPreview.src = url;
+            videoPreview.style.display = 'block';
+            audioPreview.style.display = 'none';
+            previewSection.style.display = 'block';
+            videoPreview.play();
+            playBtn.textContent = 'Pause';
+        }
+
+        function showStatus(msg, type) {
+            statusDiv.innerHTML = msg;
+            statusDiv.className = 'status ' + type;
+        }
+
+        // ==================== FEATURE 5: CONTEXT MENU & INSERT SILENCE ====================
+
+        // Hide context menu on click anywhere
+        document.addEventListener('click', () => {
+            contextMenu.classList.remove('visible');
+        });
+
+        // Right-click on speech track -> show context menu
+        speechTrack.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+
+            // EXP-011 v3 FIX: Check if right-click is on a clip and select it
+            const clipEl = e.target.closest('.timeline-clip');
+            if (clipEl && (clipEl.classList.contains('speech') || clipEl.classList.contains('silence'))) {
+                const index = parseInt(clipEl.dataset.index);
+                selectSpeechClip(index);
+                console.log('Right-clicked on clip index:', index);
+            }
+
+            // Calculate position in track
+            const trackRect = speechTrack.getBoundingClientRect();
+            const clickX = e.clientX - trackRect.left + speechTrack.scrollLeft;
+            const clickTime = clickX / PIXELS_PER_SECOND;
+
+            // Find insert position (which clip index to insert after)
+            let insertAfterIndex = -1;  // -1 means insert at beginning
+            let currentTime = 0;
+
+            for (let i = 0; i < speechClips.length; i++) {
+                const clipDuration = getTrimmedDuration(speechClips[i]);
+                if (clickTime > currentTime + clipDuration / 2) {
+                    insertAfterIndex = i;
+                }
+                currentTime += clipDuration;
+            }
+
+            contextMenuTarget = {
+                insertAfterIndex: insertAfterIndex,
+                clickTime: clickTime
+            };
+
+            // Position and show menu
+            contextMenu.style.left = e.clientX + 'px';
+            contextMenu.style.top = e.clientY + 'px';
+            contextMenu.classList.add('visible');
+
+            console.log('Context menu at time:', clickTime.toFixed(2) + 's, insert after index:', insertAfterIndex);
+        });
+
+        // Right-click on a speech/silence clip -> show context menu with remove option
+        speechTrack.addEventListener('click', (e) => {
+            const clipEl = e.target.closest('.timeline-clip');
+            if (clipEl && (clipEl.classList.contains('speech') || clipEl.classList.contains('silence'))) {
+                const index = parseInt(clipEl.dataset.index);
+                selectSpeechClip(index);
+            }
+        });
+
+        let selectedSpeechClip = null;
+
+        function selectSpeechClip(index) {
+            selectedSpeechClip = index;
+            // Visual feedback
+            document.querySelectorAll('#speechTrack .timeline-clip').forEach((el, i) => {
+                if (i === index) {
+                    el.classList.add('selected');
+                } else {
+                    el.classList.remove('selected');
+                }
+            });
+        }
+
+        // Context menu: Insert Silence
+        document.getElementById('menuInsertSilence').addEventListener('click', () => {
+            contextMenu.classList.remove('visible');
+            silenceDialog.classList.add('visible');
+            silenceDurationInput.value = '2.0';
+            silenceDurationInput.focus();
+        });
+
+        // Context menu: Remove Clip
+        document.getElementById('menuRemoveClip').addEventListener('click', () => {
+            contextMenu.classList.remove('visible');
+            if (selectedSpeechClip !== null && selectedSpeechClip < speechClips.length) {
+                saveState('Delete speech clip (menu)');  // EXP-011 v4
+                speechClips.splice(selectedSpeechClip, 1);
+                selectedSpeechClip = null;
+                renderTimeline();
+                showStatus('Clip removed from speech track', 'success');
+            }
+        });
+
+        // Silence dialog: Cancel
+        document.getElementById('silenceCancel').addEventListener('click', () => {
+            silenceDialog.classList.remove('visible');
+            contextMenuTarget = null;
+        });
+
+        // Silence dialog: Confirm
+        document.getElementById('silenceConfirm').addEventListener('click', () => {
+            const duration = parseFloat(silenceDurationInput.value) || 2.0;
+
+            if (duration < 0.1 || duration > 60) {
+                showStatus('Silence duration must be between 0.1 and 60 seconds', 'error');
+                return;
+            }
+
+            saveState('Insert silence');  // EXP-011 v4
+
+            // Create silence clip
+            const silenceClip = {
+                filename: `Silence (${duration}s)`,
+                duration: duration,
+                trimStart: 0,
+                trimEnd: 0,
+                isSilence: true,
+                silenceDuration: duration
+            };
+
+            const track = contextMenuTarget?.track || 'speech';
+            const playheadTime = contextMenuTarget?.clickTime || playheadPosition;
+
+            if (track === 'speech') {
+                // Insert silence in speech track at playhead position
+                const insertInfo = findInsertPositionAtPlayhead(speechClips, playheadTime);
+                if (insertInfo.splitClip) {
+                    // Need to split a clip and insert silence in between
+                    const clip = speechClips[insertInfo.clipIndex];
+                    if (!clip.isSilence) {
+                        const splitOffset = insertInfo.splitOffset;
+                        const originalTrimEnd = clip.trimEnd;
+
+                        // First part
+                        clip.trimEnd = clip.duration - clip.trimStart - splitOffset;
+
+                        // Second part
+                        const secondClip = { ...clip };
+                        secondClip.trimStart = clip.trimStart + splitOffset;
+                        secondClip.trimEnd = originalTrimEnd;
+
+                        // Insert: first part, silence, second part
+                        speechClips.splice(insertInfo.clipIndex + 1, 0, silenceClip, secondClip);
+                    } else {
+                        // Splitting a silence - just insert new silence after current position
+                        speechClips.splice(insertInfo.clipIndex + 1, 0, silenceClip);
+                    }
+                } else {
+                    speechClips.splice(insertInfo.insertIndex, 0, silenceClip);
+                }
+                showStatus(`Inserted ${duration}s silence in Speech Track at ${playheadTime.toFixed(1)}s`, 'success');
+            }
+            else if (track === 'music') {
+                // Insert silence in music track at playhead position
+                if (musicClips.length === 0 && audioClip) {
+                    // Convert audioClip to musicClips array first
+                    musicClips = [{ ...audioClip }];
+                    audioClip = null;
+                }
+
+                if (musicClips.length > 0) {
+                    const insertInfo = findInsertPositionAtPlayhead(musicClips, playheadTime);
+                    if (insertInfo.splitClip) {
+                        const clip = musicClips[insertInfo.clipIndex];
+                        if (!clip.isSilence) {
+                            const splitOffset = insertInfo.splitOffset;
+                            const originalTrimEnd = clip.trimEnd;
+
+                            clip.trimEnd = clip.duration - clip.trimStart - splitOffset;
+
+                            const secondClip = { ...clip };
+                            secondClip.trimStart = clip.trimStart + splitOffset;
+                            secondClip.trimEnd = originalTrimEnd;
+
+                            musicClips.splice(insertInfo.clipIndex + 1, 0, silenceClip, secondClip);
+                        } else {
+                            musicClips.splice(insertInfo.clipIndex + 1, 0, silenceClip);
+                        }
+                    } else {
+                        musicClips.splice(insertInfo.insertIndex, 0, silenceClip);
+                    }
+                    showStatus(`Inserted ${duration}s silence in Music Track at ${playheadTime.toFixed(1)}s`, 'success');
+                } else {
+                    // No music clips - just add silence
+                    musicClips = [silenceClip];
+                    showStatus(`Inserted ${duration}s silence in Music Track`, 'success');
+                }
+            }
+
+            silenceDialog.classList.remove('visible');
+            contextMenuTarget = null;
+            renderTimeline();
+        });
+
+        // Helper: Find insert position at playhead for a clips array
+        // EXP-011 v2 FIX: Use getTrimmedDuration for ALL clips to match rendering
+        function findInsertPositionAtPlayhead(clips, playheadTime) {
+            let currentTime = 0;
+            for (let i = 0; i < clips.length; i++) {
+                const clip = clips[i];
+                const clipDur = getTrimmedDuration(clip);  // Same calculation as rendering
+                const clipStart = currentTime;
+                const clipEnd = currentTime + clipDur;
+
+                if (playheadTime >= clipStart && playheadTime < clipEnd) {
+                    // Playhead is inside this clip - need to split
+                    return {
+                        splitClip: true,
+                        clipIndex: i,
+                        splitOffset: playheadTime - clipStart
+                    };
+                }
+
+                if (playheadTime < clipStart) {
+                    // Playhead is before this clip
+                    return { splitClip: false, insertIndex: i };
+                }
+
+                currentTime = clipEnd;
+            }
+            // Playhead is after all clips
+            return { splitClip: false, insertIndex: clips.length };
+        }
+
+        // Close dialog on Escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                silenceDialog.classList.remove('visible');
+                contextMenu.classList.remove('visible');
+            }
+        });
+
+        // Initial render
+        renderTimeline();
+
+        // ==================== EXP-013: EXPORT SYSTEM ====================
+
+        const exportFinalBtn = document.getElementById('exportFinalBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const exportProgress = document.getElementById('exportProgress');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const progressMessage = document.getElementById('progressMessage');
+        const exportPanel = document.getElementById('exportPanel');
+        const cleanupBtn = document.getElementById('cleanupBtn');
+
+        let currentExportJobId = null;
+        let exportPollInterval = null;
+
+        // Update export button state based on video clips
+        function updateExportButtonState() {
+            exportFinalBtn.disabled = videoClips.length === 0;
+        }
+
+        // Fetch and display storage info
+        async function fetchStorageInfo() {
+            try {
+                const response = await fetch('/storage-info');
+                const data = await response.json();
+                document.getElementById('uploadsSize').textContent = data.uploads_mb;
+                document.getElementById('previewsSize').textContent = data.previews_mb;
+                document.getElementById('exportsSize').textContent = data.exports_mb;
+                document.getElementById('exportsCount').textContent = data.exports_count;
+            } catch (err) {
+                console.error('Failed to fetch storage info:', err);
+            }
+        }
+
+        // Fetch and display exports list
+        async function fetchExportsList() {
+            try {
+                const response = await fetch('/exports');
+                const data = await response.json();
+                const container = document.getElementById('exportsListContent');
+
+                if (data.exports.length === 0) {
+                    container.innerHTML = '<div class="export-item" style="color: #666; justify-content: center;">No exports yet</div>';
+                    return;
+                }
+
+                container.innerHTML = data.exports.map(exp => `
+                    <div class="export-item">
+                        <span class="filename">${exp.filename}</span>
+                        <span class="size">${exp.size_mb} MB</span>
+                        <a href="${exp.download_url}" class="btn-small" download>Download</a>
+                    </div>
+                `).join('');
+            } catch (err) {
+                console.error('Failed to fetch exports:', err);
+            }
+        }
+
+        // Poll export status
+        async function pollExportStatus(jobId) {
+            try {
+                const response = await fetch(`/export-status/${jobId}`);
+                const data = await response.json();
+
+                // Update progress bar
+                progressBar.style.width = data.progress + '%';
+                progressText.textContent = data.progress + '%';
+                progressMessage.textContent = data.message;
+
+                if (data.status === 'completed') {
+                    // Export complete!
+                    clearInterval(exportPollInterval);
+                    exportPollInterval = null;
+                    currentExportJobId = null;
+
+                    exportPanel.classList.remove('exporting');
+                    exportPanel.classList.add('completed');
+                    exportFinalBtn.disabled = false;
+                    exportFinalBtn.textContent = 'Export Final Video (1080p)';
+
+                    // Show download button
+                    downloadBtn.style.display = 'inline-block';
+                    downloadBtn.onclick = () => {
+                        window.location.href = data.download_url;
+                    };
+
+                    showStatus(`Export complete! <a href="${data.download_url}">Download ${data.filename}</a>`, 'success');
+
+                    // Refresh lists
+                    fetchStorageInfo();
+                    fetchExportsList();
+
+                    // Remove completed class after 3 seconds
+                    setTimeout(() => {
+                        exportPanel.classList.remove('completed');
+                    }, 3000);
+
+                } else if (data.status === 'failed') {
+                    // Export failed
+                    clearInterval(exportPollInterval);
+                    exportPollInterval = null;
+                    currentExportJobId = null;
+
+                    exportPanel.classList.remove('exporting');
+                    exportFinalBtn.disabled = false;
+                    exportFinalBtn.textContent = 'Export Final Video (1080p)';
+                    progressMessage.textContent = 'Export failed: ' + data.error;
+
+                    showStatus('Export failed: ' + data.error, 'error');
+                }
+                // If still processing, keep polling
+            } catch (err) {
+                console.error('Poll error:', err);
+            }
+        }
+
+        // Start export
+        exportFinalBtn.addEventListener('click', async () => {
+            if (videoClips.length === 0) return;
+
+            exportFinalBtn.disabled = true;
+            exportFinalBtn.textContent = 'Exporting...';
+            exportPanel.classList.add('exporting');
+            exportProgress.style.display = 'block';
+            downloadBtn.style.display = 'none';
+            progressBar.style.width = '0%';
+            progressText.textContent = '0%';
+            progressMessage.textContent = 'Starting export...';
+
+            const payload = {
+                videos: videoClips.map(c => ({
+                    ...c,
+                    trimStart: c.trimStart,
+                    trimEnd: c.trimEnd,
+                })),
+                audio: audioClip ? {
+                    ...audioClip,
+                    trimStart: audioClip.trimStart,
+                    trimEnd: audioClip.trimEnd,
+                } : null,
+                speech: speechClips.map(c => ({
+                    ...c,
+                    trimStart: c.trimStart || 0,
+                    trimEnd: c.trimEnd || 0,
+                })),
+                crossfade_duration: parseFloat(document.getElementById('crossfadeDuration').value),
+                crossfade_transition: document.getElementById('crossfadeTransition').value,
+                speech_volume: getSpeechVolumeDecimal(),
+                music_volume: getMusicVolumeDecimal(),
+                audio_fade_in: parseFloat(document.getElementById('audioFadeIn').value),
+                audio_fade_out: parseFloat(document.getElementById('audioFadeOut').value),
+            };
+
+            try {
+                const response = await fetch('/export', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    currentExportJobId = data.job_id;
+                    showStatus('Export started. Rendering full HD video...', 'loading');
+
+                    // Start polling for status
+                    exportPollInterval = setInterval(() => {
+                        pollExportStatus(data.job_id);
+                    }, 500);  // Poll every 500ms
+                } else {
+                    exportPanel.classList.remove('exporting');
+                    exportFinalBtn.disabled = false;
+                    exportFinalBtn.textContent = 'Export Final Video (1080p)';
+                    showStatus('Export failed: ' + data.error, 'error');
+                }
+            } catch (err) {
+                exportPanel.classList.remove('exporting');
+                exportFinalBtn.disabled = false;
+                exportFinalBtn.textContent = 'Export Final Video (1080p)';
+                showStatus('Error: ' + err.message, 'error');
+            }
+        });
+
+        // Cleanup button
+        cleanupBtn.addEventListener('click', async () => {
+            cleanupBtn.disabled = true;
+            cleanupBtn.textContent = 'Cleaning...';
+
+            try {
+                const response = await fetch('/cleanup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        preview_max_age_hours: 1,
+                        upload_max_age_hours: 24
+                    }),
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    showStatus(data.message, 'success');
+                    fetchStorageInfo();
+                } else {
+                    showStatus('Cleanup failed', 'error');
+                }
+            } catch (err) {
+                showStatus('Cleanup error: ' + err.message, 'error');
+            }
+
+            cleanupBtn.disabled = false;
+            cleanupBtn.textContent = 'Cleanup Old Files';
+        });
+
+        // Update export button when clips change
+        const originalRenderTimeline = renderTimeline;
+        renderTimeline = function() {
+            originalRenderTimeline();
+            updateExportButtonState();
+        };
+
+        // Initial fetch
+        fetchStorageInfo();
+        fetchExportsList();
+
+        // Refresh storage info every 30 seconds
+        setInterval(fetchStorageInfo, 30000);
+        // ==================== END EXPORT SYSTEM ====================
+    </script>
+</body>
+</html>

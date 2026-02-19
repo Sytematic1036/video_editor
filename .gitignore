@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Node.js
+node_modules/
+package-lock.json
+
+# Uploads and outputs (user-generated content)
+uploads/
+preview/
+exports/
+output/
+
+# Logs
+*.log
+server.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp files
+*.tmp
+nul

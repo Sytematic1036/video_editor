@@ -1,0 +1,2 @@
+Created: 2026-02-19T11:48:25+01:00
+Iteration: v2_auto-scroll-playhead

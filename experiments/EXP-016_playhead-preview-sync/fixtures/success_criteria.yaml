@@ -1,0 +1,24 @@
+criteria:
+  - name: "Preview slider synkar med playhead"
+    test: "node test_playhead_sync.js"
+    expected: "Playwright-test passerar"
+
+  - name: "Playhead synkar med preview (redan i EXP-015)"
+    test: "Dra playhead -> preview.currentTime uppdateras"
+    expected: "Preview visar korrekt frame"
+
+  - name: "Tidslinje visar M:SS format"
+    test: "node test_timeline_format.js"
+    expected: "Ruler visar 0:30, 1:00, 1:30 etc"
+
+  - name: "Edge case: 0 sekunder"
+    test: "formatTime(0)"
+    expected: "0:00"
+
+  - name: "Edge case: 60 sekunder"
+    test: "formatTime(60)"
+    expected: "1:00"
+
+  - name: "Edge case: 90 sekunder"
+    test: "formatTime(90)"
+    expected: "1:30"
