@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Editor + HTML to MP4 - EXP-018 v2</title>
+    <title>Video Editor + HTML to MP4 - EXP-019 v2</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -1636,17 +1636,18 @@
             }
 
             const audioDuration = audioClip ? getTrimmedDuration(audioClip) : 0;
-            const maxDuration = Math.max(totalVideoDuration, audioDuration, 30);
+            const speechDuration = speechClips.reduce((sum, c) => sum + getTrimmedDuration(c), 0);
 
             timelineDuration = totalVideoDuration;
 
-            const speechDuration = speechClips.reduce((sum, c) => sum + getTrimmedDuration(c), 0);
+            // EXP-019 v2: Use getTimelineMaxDuration() for rulers to match track widths
+            const rulerDuration = getTimelineMaxDuration();
 
             scaleInfo.textContent = `Scale: ${PIXELS_PER_SECOND}px = 1 second | Video: ${totalVideoDuration.toFixed(1)}s | Speech: ${speechDuration.toFixed(1)}s | Music: ${audioDuration.toFixed(1)}s`;
 
-            renderRuler(videoRuler, maxDuration);
-            renderRuler(audioRuler, maxDuration);
-            renderRuler(speechRuler, maxDuration);
+            renderRuler(videoRuler, rulerDuration);
+            renderRuler(audioRuler, rulerDuration);
+            renderRuler(speechRuler, rulerDuration);
             renderVideoTrack(crossfade);
             renderAudioTrack();
             renderSpeechTrack();
@@ -1663,11 +1664,8 @@
 
         function renderVideoTrack(crossfade) {
             videoTrack.innerHTML = '';
-            const maxDuration = Math.max(
-                videoClips.reduce((sum, c) => sum + getTrimmedDuration(c), 0) - crossfade * Math.max(0, videoClips.length - 1),
-                audioClip ? getTrimmedDuration(audioClip) : 0,
-                30
-            );
+            // EXP-019: Use getTimelineMaxDuration() for consistent track widths
+            const maxDuration = getTimelineMaxDuration();
             videoTrack.style.width = (maxDuration * PIXELS_PER_SECOND) + 'px';
 
             let currentPos = 0;
@@ -1717,13 +1715,8 @@
 
         function renderAudioTrack() {
             audioTrack.innerHTML = '';
-            const musicDuration = getMusicDuration();
-            const maxDuration = Math.max(
-                videoClips.reduce((sum, c) => sum + getTrimmedDuration(c), 0),
-                musicDuration,
-                speechClips.reduce((sum, c) => sum + getTrimmedDuration(c), 0),
-                30
-            );
+            // EXP-019: Use getTimelineMaxDuration() for consistent track widths
+            const maxDuration = getTimelineMaxDuration();
             audioTrack.style.width = (maxDuration * PIXELS_PER_SECOND) + 'px';
 
             // Render musicClips array (EXP-010)
@@ -1778,12 +1771,8 @@
 
         function renderSpeechTrack() {
             speechTrack.innerHTML = '';
-            const maxDuration = Math.max(
-                videoClips.reduce((sum, c) => sum + getTrimmedDuration(c), 0),
-                getMusicDuration(),
-                speechClips.reduce((sum, c) => sum + getTrimmedDuration(c), 0),
-                30
-            );
+            // EXP-019: Use getTimelineMaxDuration() for consistent track widths
+            const maxDuration = getTimelineMaxDuration();
             speechTrack.style.width = (maxDuration * PIXELS_PER_SECOND) + 'px';
 
             let currentPos = 0;
@@ -1923,6 +1912,21 @@
             return Math.max(videoDur, speechDur, musicDur, 1);
         }
 
+        // EXP-019: Get timeline max duration for consistent track widths
+        // All tracks should be at least as wide as the longest media
+        function getTimelineMaxDuration() {
+            const crossfade = parseFloat(document.getElementById('crossfadeDuration').value) || 0;
+            let videoDur = 0;
+            if (videoClips.length > 0) {
+                videoDur = videoClips.reduce((sum, c) => sum + getTrimmedDuration(c), 0);
+                videoDur -= crossfade * Math.max(0, videoClips.length - 1);
+            }
+            const speechDur = speechClips.reduce((sum, c) => sum + getTrimmedDuration(c), 0);
+            const musicDur = getMusicDuration();
+            // Minimum 30 seconds for timeline visibility
+            return Math.max(videoDur, speechDur, musicDur, 30);
+        }
+
         // EXP-016 v3: Update playhead visual position based on scroll
         // Playhead is outside the scrolling containers, so we must adjust its
         // visual position to account for the scroll offset
@@ -1952,22 +1956,25 @@
             // Calculate playhead's ABSOLUTE position (not visual)
             const playheadAbsoluteLeft = playheadPosition * PIXELS_PER_SECOND + PLAYHEAD_LEFT_OFFSET;
 
-            // 20% margin from edges
-            const margin = viewportWidth * 0.2;
+            // EXP-019: Asymmetric margins - smaller on left, larger on right
+            // This keeps playhead visible with more context ahead (right side)
+            const leftMargin = viewportWidth * 0.1;  // 10% from left edge
+            const rightMargin = viewportWidth * 0.3; // 30% from right edge
 
             // Calculate visible range in absolute coordinates
-            const visibleLeft = currentScroll + margin;
-            const visibleRight = currentScroll + viewportWidth - margin;
+            const visibleLeft = currentScroll + leftMargin;
+            const visibleRight = currentScroll + viewportWidth - rightMargin;
 
             let newScrollLeft = null;
 
-            // If playhead is too far right (beyond visible area)
+            // If playhead is too far right (beyond visible area with right margin)
             if (playheadAbsoluteLeft > visibleRight) {
-                newScrollLeft = playheadAbsoluteLeft - viewportWidth + margin;
+                // Scroll so playhead is at 70% of viewport (30% margin on right)
+                newScrollLeft = playheadAbsoluteLeft - viewportWidth + rightMargin;
             }
             // If playhead is too far left (before visible area)
             else if (playheadAbsoluteLeft < visibleLeft) {
-                newScrollLeft = Math.max(0, playheadAbsoluteLeft - margin);
+                newScrollLeft = Math.max(0, playheadAbsoluteLeft - leftMargin);
             }
 
             // Scroll all track-scroll elements together
