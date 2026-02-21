@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Editor + HTML to MP4 - EXP-018</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        h1 { text-align: center; margin-bottom: 20px; color: #00d9ff; }
+        .container { max-width: 1400px; margin: 0 auto; }
+
+        /* Main Tab Navigation */
+        .main-tab-nav {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 20px;
+            border-bottom: 3px solid #00d9ff;
+            padding-bottom: 0;
+        }
+        .main-tab-btn {
+            padding: 14px 28px;
+            background: #16213e;
+            border: none;
+            color: #888;
+            cursor: pointer;
+            border-radius: 8px 8px 0 0;
+            font-size: 15px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        .main-tab-btn:hover { background: #1a3a5c; color: #aaa; }
+        .main-tab-btn.active {
+            background: #00d9ff;
+            color: #000;
+        }
+
+        /* Tab content */
+        .main-tab-content { display: none; }
+        .main-tab-content.active { display: block; }
+
+        /* Section styling */
+        .section {
+            background: #0f0f23;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .section h2 {
+            color: #00d9ff;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Drop zone */
+        .drop-zone {
+            border: 3px dashed #444;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 20px;
+            background: #16213e;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .drop-zone.dragover { border-color: #00d9ff; background: #1a3a5c; }
+        .drop-zone h3 { margin-bottom: 10px; color: #888; }
+        .drop-zone p { color: #666; font-size: 14px; }
+
+        /* File info */
+        .file-info {
+            background: #16213e;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .file-info.visible { display: block; }
+        .file-info .filename {
+            font-weight: bold;
+            color: #00d9ff;
+            font-size: 16px;
+        }
+        .file-info .file-path {
+            color: #666;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+
+        /* Buttons */
+        .btn-row {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #00d9ff 0%, #00a8cc 100%);
+            color: #000;
+        }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0,217,255,0.4); }
+        .btn-primary:disabled {
+            background: #333;
+            color: #666;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .btn-secondary {
+            background: #333;
+            color: #eee;
+        }
+        .btn-secondary:hover { background: #444; }
+        .btn-success {
+            background: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%);
+            color: #000;
+        }
+        .btn-success:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0,255,136,0.4); }
+
+        /* Progress */
+        .progress-container {
+            margin-top: 20px;
+            display: none;
+        }
+        .progress-container.visible { display: block; }
+        .progress-bar {
+            height: 8px;
+            background: #333;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00d9ff 0%, #00ff88 100%);
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .progress-text {
+            color: #888;
+            font-size: 14px;
+            text-align: center;
+        }
+
+        /* Status messages */
+        .status {
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-top: 15px;
+            display: none;
+        }
+        .status.visible { display: block; }
+        .status.success { background: rgba(0,255,136,0.2); color: #00ff88; }
+        .status.error { background: rgba(255,68,68,0.2); color: #ff4444; }
+        .status.info { background: rgba(0,217,255,0.2); color: #00d9ff; }
+
+        /* Result section */
+        .result-section {
+            margin-top: 20px;
+            padding: 20px;
+            background: #16213e;
+            border-radius: 8px;
+            display: none;
+        }
+        .result-section.visible { display: block; }
+        .result-section h3 {
+            color: #00ff88;
+            margin-bottom: 15px;
+        }
+        .result-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        .stat-item { text-align: center; }
+        .stat-item .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #00d9ff;
+        }
+        .stat-item .label { font-size: 12px; color: #666; }
+
+        /* Hidden file input */
+        .file-input { display: none; }
+
+        /* ==================== HTML TO MP4 SPECIFIC ==================== */
+
+        /* Slide durations section */
+        .slide-durations-section {
+            background: #16213e;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .slide-durations-section.visible { display: block; }
+        .slide-durations-section h3 {
+            color: #00d9ff;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+        .slide-durations-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 10px;
+            margin-bottom: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+        .slide-duration-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #0f0f23;
+            padding: 8px 12px;
+            border-radius: 6px;
+        }
+        .slide-duration-item label {
+            font-size: 13px;
+            color: #888;
+            white-space: nowrap;
+        }
+        .slide-duration-item input {
+            width: 60px;
+            padding: 6px 8px;
+            border: 1px solid #333;
+            border-radius: 4px;
+            background: #1a1a2e;
+            color: #eee;
+            font-size: 14px;
+            text-align: center;
+        }
+        .slide-duration-item input:focus {
+            outline: none;
+            border-color: #00d9ff;
+        }
+        .slide-duration-item span {
+            font-size: 12px;
+            color: #666;
+        }
+        .total-duration {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 15px;
+            border-top: 1px solid #333;
+        }
+        .total-duration .label {
+            font-size: 14px;
+            color: #888;
+        }
+        .total-duration .value {
+            font-size: 20px;
+            font-weight: bold;
+            color: #00ff88;
+        }
+
+        /* Settings grid */
+        .settings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+            background: #16213e;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        .setting-item label {
+            display: block;
+            color: #888;
+            font-size: 12px;
+            margin-bottom: 5px;
+        }
+        .setting-item input, .setting-item select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #333;
+            border-radius: 6px;
+            background: #0f0f23;
+            color: #eee;
+            font-size: 14px;
+        }
+        .setting-item input:focus, .setting-item select:focus {
+            outline: none;
+            border-color: #00d9ff;
+        }
+
+        /* Scrollbar styling */
+        .slide-durations-grid::-webkit-scrollbar { width: 6px; }
+        .slide-durations-grid::-webkit-scrollbar-track {
+            background: #1a1a2e;
+            border-radius: 3px;
+        }
+        .slide-durations-grid::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 3px;
+        }
+        .slide-durations-grid::-webkit-scrollbar-thumb:hover { background: #555; }
+
+        /* ==================== VIDEO EDITOR SPECIFIC ==================== */
+
+        .track-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+        .track-header h3 {
+            color: #00d9ff;
+            margin: 0;
+            flex-grow: 1;
+        }
+        .btn-upload {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+        .btn-upload:hover { transform: scale(1.05); }
+        .btn-upload-video {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .btn-upload::before {
+            content: '+';
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        /* Timeline */
+        .timeline-container {
+            background: #0f0f23;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            overflow-x: auto;
+        }
+        .timeline-container h3 { margin-bottom: 10px; color: #00d9ff; }
+
+        .track {
+            height: 80px;
+            position: relative;
+            background: #1a1a2e;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            min-width: 100%;
+        }
+
+        .timeline-clip {
+            position: absolute;
+            height: 60px;
+            top: 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            overflow: hidden;
+            white-space: nowrap;
+            transition: box-shadow 0.2s;
+        }
+        .timeline-clip:hover { box-shadow: 0 0 0 2px #00d9ff; }
+        .timeline-clip.video { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .timeline-clip .clip-info {
+            display: flex;
+            flex-direction: column;
+            padding: 0 10px;
+        }
+        .clip-name { font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+        .clip-duration { font-size: 10px; opacity: 0.8; }
+
+        /* Video preview area */
+        .video-preview-area {
+            background: #16213e;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .video-preview-area h3 {
+            color: #00d9ff;
+            margin-bottom: 15px;
+        }
+        .video-container {
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            max-width: 100%;
+            aspect-ratio: 16/9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .video-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .video-placeholder {
+            color: #666;
+            font-size: 16px;
+        }
+
+        /* Upload drop zone for videos */
+        .video-drop-zone {
+            border: 3px dashed #667eea;
+            border-radius: 12px;
+            padding: 30px;
+            text-align: center;
+            background: #16213e;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 20px;
+        }
+        .video-drop-zone.dragover { border-color: #00d9ff; background: #1a3a5c; }
+        .video-drop-zone h3 { color: #667eea; margin-bottom: 10px; }
+        .video-drop-zone p { color: #666; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Video Editor + HTML to MP4 - EXP-018</h1>
+
+        <!-- Main Tab Navigation -->
+        <div class="main-tab-nav">
+            <button class="main-tab-btn active" data-tab="video-editor">Video Editor</button>
+            <button class="main-tab-btn" data-tab="html-to-mp4">HTML to MP4</button>
+        </div>
+
+        <!-- ==================== VIDEO EDITOR TAB ==================== -->
+        <div id="video-editor" class="main-tab-content active">
+            <div class="section">
+                <h2>Video Editor</h2>
+                <p style="color: #888; margin-bottom: 20px;">
+                    Upload videos, trim, arrange, and export. Supports crossfade transitions.
+                </p>
+
+                <!-- Video Upload Drop Zone -->
+                <div class="video-drop-zone" id="videoDropZone">
+                    <h3>Drop Video Files Here</h3>
+                    <p>or click to browse (MP4, AVI, MOV, MKV, WebM)</p>
+                    <input type="file" id="videoFileInput" class="file-input" accept=".mp4,.avi,.mov,.mkv,.webm" multiple>
+                </div>
+
+                <!-- Timeline -->
+                <div class="timeline-container">
+                    <div class="track-header">
+                        <h3>Video Track</h3>
+                    </div>
+                    <div class="track" id="videoTrack">
+                        <!-- Clips will be added here -->
+                    </div>
+                </div>
+
+                <!-- Video Preview -->
+                <div class="video-preview-area">
+                    <h3>Preview</h3>
+                    <div class="video-container" id="videoPreviewContainer">
+                        <div class="video-placeholder">Upload videos to preview</div>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="btn-row">
+                    <button class="btn btn-primary" id="previewVideoBtn" disabled>
+                        Generate Preview
+                    </button>
+                    <button class="btn btn-success" id="exportVideoBtn" disabled>
+                        Export Video
+                    </button>
+                    <button class="btn btn-secondary" id="clearVideoBtn">
+                        Clear All
+                    </button>
+                </div>
+
+                <!-- Progress -->
+                <div class="progress-container" id="videoProgressContainer">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="videoProgressFill"></div>
+                    </div>
+                    <div class="progress-text" id="videoProgressText">Processing...</div>
+                </div>
+
+                <!-- Status -->
+                <div class="status" id="videoStatusMsg"></div>
+            </div>
+        </div>
+
+        <!-- ==================== HTML TO MP4 TAB ==================== -->
+        <div id="html-to-mp4" class="main-tab-content">
+            <div class="section">
+                <h2>HTML to MP4 Converter</h2>
+                <p style="color: #888; margin-bottom: 20px;">
+                    Convert HTML presentations and pages to MP4 video.
+                    Individual slide durations can be customized.
+                </p>
+
+                <!-- Drop Zone for HTML -->
+                <div class="drop-zone" id="htmlDropZone">
+                    <h3>Drop HTML File Here</h3>
+                    <p>or click to browse</p>
+                    <input type="file" id="htmlFileInput" class="file-input" accept=".html">
+                </div>
+
+                <!-- File Info -->
+                <div class="file-info" id="htmlFileInfo">
+                    <div class="filename" id="htmlFileName">-</div>
+                    <div class="file-path" id="htmlFilePath">-</div>
+                </div>
+
+                <!-- Slide Durations Section -->
+                <div class="slide-durations-section" id="slideDurationsSection">
+                    <h3>Slide Durations (seconds per slide)</h3>
+                    <div class="slide-durations-grid" id="slideDurationsGrid">
+                        <!-- Populated dynamically -->
+                    </div>
+                    <div class="total-duration">
+                        <span class="label">Total Duration:</span>
+                        <span class="value" id="totalDuration">0s</span>
+                    </div>
+                </div>
+
+                <!-- Settings -->
+                <div class="settings-grid">
+                    <div class="setting-item">
+                        <label>Resolution</label>
+                        <select id="htmlResolution">
+                            <option value="1920x1080">1920x1080 (Full HD)</option>
+                            <option value="1280x720">1280x720 (HD)</option>
+                            <option value="854x480">854x480 (SD)</option>
+                        </select>
+                    </div>
+                    <div class="setting-item">
+                        <label>FPS (frames per second)</label>
+                        <input type="number" id="htmlFps" value="2" min="1" max="30">
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="btn-row">
+                    <button class="btn btn-primary" id="generateHtmlBtn" disabled>
+                        Generate MP4
+                    </button>
+                    <button class="btn btn-secondary" id="clearHtmlBtn">
+                        Clear
+                    </button>
+                </div>
+
+                <!-- Progress -->
+                <div class="progress-container" id="htmlProgressContainer">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="htmlProgressFill"></div>
+                    </div>
+                    <div class="progress-text" id="htmlProgressText">Processing...</div>
+                </div>
+
+                <!-- Status -->
+                <div class="status" id="htmlStatusMsg"></div>
+
+                <!-- Result Section -->
+                <div class="result-section" id="htmlResultSection">
+                    <h3>Conversion Complete!</h3>
+                    <div class="result-stats">
+                        <div class="stat-item">
+                            <div class="value" id="resultSlides">-</div>
+                            <div class="label">Slides</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="value" id="resultDuration">-</div>
+                            <div class="label">Duration (s)</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="value" id="resultSize">-</div>
+                            <div class="label">Size (MB)</div>
+                        </div>
+                    </div>
+                    <button class="btn btn-success" id="downloadHtmlBtn">
+                        Download MP4
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==================== TAB SWITCHING ====================
+        document.querySelectorAll('.main-tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.main-tab-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                const tabId = btn.dataset.tab;
+                document.querySelectorAll('.main-tab-content').forEach(c => c.classList.remove('active'));
+                document.getElementById(tabId).classList.add('active');
+            });
+        });
+
+        // ==================== VIDEO EDITOR STATE ====================
+        let videoClips = [];
+        const PIXELS_PER_SECOND = 50;
+
+        // ==================== VIDEO EDITOR DOM ====================
+        const videoDropZone = document.getElementById('videoDropZone');
+        const videoFileInput = document.getElementById('videoFileInput');
+        const videoTrack = document.getElementById('videoTrack');
+        const videoPreviewContainer = document.getElementById('videoPreviewContainer');
+        const previewVideoBtn = document.getElementById('previewVideoBtn');
+        const exportVideoBtn = document.getElementById('exportVideoBtn');
+        const clearVideoBtn = document.getElementById('clearVideoBtn');
+        const videoProgressContainer = document.getElementById('videoProgressContainer');
+        const videoProgressFill = document.getElementById('videoProgressFill');
+        const videoProgressText = document.getElementById('videoProgressText');
+        const videoStatusMsg = document.getElementById('videoStatusMsg');
+
+        // ==================== VIDEO EDITOR FUNCTIONS ====================
+        videoDropZone.addEventListener('click', () => videoFileInput.click());
+
+        videoDropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            videoDropZone.classList.add('dragover');
+        });
+
+        videoDropZone.addEventListener('dragleave', () => {
+            videoDropZone.classList.remove('dragover');
+        });
+
+        videoDropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            videoDropZone.classList.remove('dragover');
+            const files = Array.from(e.dataTransfer.files);
+            files.forEach(file => uploadVideoFile(file));
+        });
+
+        videoFileInput.addEventListener('change', (e) => {
+            const files = Array.from(e.target.files);
+            files.forEach(file => uploadVideoFile(file));
+        });
+
+        async function uploadVideoFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    videoClips.push(data);
+                    renderVideoTimeline();
+                    updateVideoButtons();
+                    showVideoStatus(`Uploaded: ${data.filename}`, 'success');
+                } else {
+                    showVideoStatus(data.error || 'Upload failed', 'error');
+                }
+            } catch (error) {
+                showVideoStatus('Upload error: ' + error.message, 'error');
+            }
+        }
+
+        function renderVideoTimeline() {
+            videoTrack.innerHTML = '';
+            let offset = 0;
+
+            videoClips.forEach((clip, index) => {
+                const duration = clip.duration || 5;
+                const width = duration * PIXELS_PER_SECOND;
+
+                const clipEl = document.createElement('div');
+                clipEl.className = 'timeline-clip video';
+                clipEl.style.left = offset + 'px';
+                clipEl.style.width = width + 'px';
+                clipEl.innerHTML = `
+                    <div class="clip-info">
+                        <span class="clip-name">${clip.filename}</span>
+                        <span class="clip-duration">${duration.toFixed(1)}s</span>
+                    </div>
+                `;
+
+                clipEl.addEventListener('click', () => {
+                    // Preview this clip
+                    videoPreviewContainer.innerHTML = `
+                        <video controls autoplay>
+                            <source src="${clip.preview_url}" type="video/mp4">
+                        </video>
+                    `;
+                });
+
+                videoTrack.appendChild(clipEl);
+                offset += width + 5;
+            });
+
+            // Update track width
+            videoTrack.style.minWidth = (offset + 100) + 'px';
+        }
+
+        function updateVideoButtons() {
+            const hasClips = videoClips.length > 0;
+            previewVideoBtn.disabled = !hasClips;
+            exportVideoBtn.disabled = !hasClips;
+        }
+
+        previewVideoBtn.addEventListener('click', async () => {
+            if (videoClips.length === 0) return;
+
+            previewVideoBtn.disabled = true;
+            videoProgressContainer.classList.add('visible');
+            videoProgressFill.style.width = '30%';
+            videoProgressText.textContent = 'Generating preview...';
+
+            try {
+                const response = await fetch('/preview-full', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        videos: videoClips.map(c => ({
+                            path: c.path,
+                            duration: c.duration,
+                            trimStart: c.trimStart || 0,
+                            trimEnd: c.trimEnd || 0
+                        })),
+                        crossfade_duration: 1.0,
+                        crossfade_transition: 'fade'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    videoProgressFill.style.width = '100%';
+                    videoProgressText.textContent = 'Preview ready!';
+
+                    videoPreviewContainer.innerHTML = `
+                        <video controls autoplay>
+                            <source src="${data.preview_url}" type="video/mp4">
+                        </video>
+                    `;
+
+                    showVideoStatus('Preview generated!', 'success');
+                } else {
+                    showVideoStatus(data.error || 'Preview failed', 'error');
+                }
+            } catch (error) {
+                showVideoStatus('Error: ' + error.message, 'error');
+            } finally {
+                previewVideoBtn.disabled = false;
+                setTimeout(() => videoProgressContainer.classList.remove('visible'), 2000);
+            }
+        });
+
+        exportVideoBtn.addEventListener('click', async () => {
+            if (videoClips.length === 0) return;
+
+            exportVideoBtn.disabled = true;
+            videoProgressContainer.classList.add('visible');
+            videoProgressFill.style.width = '10%';
+            videoProgressText.textContent = 'Starting export...';
+
+            try {
+                const response = await fetch('/export', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        videos: videoClips.map(c => ({
+                            path: c.path,
+                            duration: c.duration,
+                            trimStart: c.trimStart || 0,
+                            trimEnd: c.trimEnd || 0
+                        })),
+                        crossfade_duration: 1.0,
+                        crossfade_transition: 'fade'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Poll for status
+                    pollExportStatus(data.job_id);
+                } else {
+                    showVideoStatus(data.error || 'Export failed', 'error');
+                    exportVideoBtn.disabled = false;
+                    videoProgressContainer.classList.remove('visible');
+                }
+            } catch (error) {
+                showVideoStatus('Error: ' + error.message, 'error');
+                exportVideoBtn.disabled = false;
+                videoProgressContainer.classList.remove('visible');
+            }
+        });
+
+        async function pollExportStatus(jobId) {
+            const poll = async () => {
+                const response = await fetch(`/export-status/${jobId}`);
+                const data = await response.json();
+
+                videoProgressFill.style.width = data.progress + '%';
+                videoProgressText.textContent = data.message || 'Processing...';
+
+                if (data.status === 'completed') {
+                    showVideoStatus('Export complete!', 'success');
+                    window.location.href = data.download_url;
+                    exportVideoBtn.disabled = false;
+                    setTimeout(() => videoProgressContainer.classList.remove('visible'), 2000);
+                } else if (data.status === 'failed') {
+                    showVideoStatus(data.error || 'Export failed', 'error');
+                    exportVideoBtn.disabled = false;
+                    videoProgressContainer.classList.remove('visible');
+                } else {
+                    setTimeout(poll, 1000);
+                }
+            };
+            poll();
+        }
+
+        clearVideoBtn.addEventListener('click', () => {
+            videoClips = [];
+            renderVideoTimeline();
+            updateVideoButtons();
+            videoPreviewContainer.innerHTML = '<div class="video-placeholder">Upload videos to preview</div>';
+            showVideoStatus('Cleared!', 'success');
+        });
+
+        function showVideoStatus(message, type) {
+            videoStatusMsg.textContent = message;
+            videoStatusMsg.className = 'status visible ' + type;
+            if (type === 'success') {
+                setTimeout(() => videoStatusMsg.classList.remove('visible'), 3000);
+            }
+        }
+
+        // ==================== HTML TO MP4 STATE ====================
+        let uploadedHtml = null;
+        let currentJobId = null;
+        let pollInterval = null;
+        let slideDurations = {};
+
+        // ==================== HTML TO MP4 DOM ====================
+        const htmlDropZone = document.getElementById('htmlDropZone');
+        const htmlFileInput = document.getElementById('htmlFileInput');
+        const htmlFileInfo = document.getElementById('htmlFileInfo');
+        const htmlFileName = document.getElementById('htmlFileName');
+        const htmlFilePath = document.getElementById('htmlFilePath');
+        const slideDurationsSection = document.getElementById('slideDurationsSection');
+        const slideDurationsGrid = document.getElementById('slideDurationsGrid');
+        const totalDurationEl = document.getElementById('totalDuration');
+        const generateHtmlBtn = document.getElementById('generateHtmlBtn');
+        const clearHtmlBtn = document.getElementById('clearHtmlBtn');
+        const htmlProgressContainer = document.getElementById('htmlProgressContainer');
+        const htmlProgressFill = document.getElementById('htmlProgressFill');
+        const htmlProgressText = document.getElementById('htmlProgressText');
+        const htmlStatusMsg = document.getElementById('htmlStatusMsg');
+        const htmlResultSection = document.getElementById('htmlResultSection');
+        const downloadHtmlBtn = document.getElementById('downloadHtmlBtn');
+
+        // ==================== HTML TO MP4 FUNCTIONS ====================
+        htmlDropZone.addEventListener('click', () => htmlFileInput.click());
+
+        htmlDropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            htmlDropZone.classList.add('dragover');
+        });
+
+        htmlDropZone.addEventListener('dragleave', () => {
+            htmlDropZone.classList.remove('dragover');
+        });
+
+        htmlDropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            htmlDropZone.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) uploadHtmlFile(file);
+        });
+
+        htmlFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) uploadHtmlFile(file);
+        });
+
+        async function uploadHtmlFile(file) {
+            if (!file.name.toLowerCase().endsWith('.html')) {
+                showHtmlStatus('Only HTML files are supported', 'error');
+                return;
+            }
+
+            showHtmlStatus('Uploading and analyzing...', 'info');
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('/html-upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    uploadedHtml = data;
+                    htmlFileName.textContent = data.filename;
+                    htmlFilePath.textContent = `${data.total_slides} slides detected`;
+                    htmlFileInfo.classList.add('visible');
+
+                    slideDurations = data.slide_durations || {};
+                    renderSlideDurations(data.total_slides, slideDurations);
+                    slideDurationsSection.classList.add('visible');
+
+                    generateHtmlBtn.disabled = false;
+                    showHtmlStatus(`File uploaded! ${data.total_slides} slides, ${data.total_duration}s total`, 'success');
+                } else {
+                    showHtmlStatus(data.error || 'Upload failed', 'error');
+                }
+            } catch (error) {
+                showHtmlStatus('Upload error: ' + error.message, 'error');
+            }
+        }
+
+        function renderSlideDurations(totalSlides, durations) {
+            slideDurationsGrid.innerHTML = '';
+
+            for (let i = 0; i < totalSlides; i++) {
+                const duration = durations[i] || 5;
+                slideDurations[i] = duration;
+
+                const item = document.createElement('div');
+                item.className = 'slide-duration-item';
+                item.innerHTML = `
+                    <label>Slide ${i + 1}:</label>
+                    <input type="number"
+                           id="slide-duration-${i}"
+                           value="${duration}"
+                           min="1"
+                           max="120"
+                           data-slide="${i}">
+                    <span>s</span>
+                `;
+                slideDurationsGrid.appendChild(item);
+
+                const input = item.querySelector('input');
+                input.addEventListener('change', (e) => {
+                    const slideIndex = parseInt(e.target.dataset.slide);
+                    const newDuration = parseInt(e.target.value) || 5;
+                    slideDurations[slideIndex] = newDuration;
+                    updateTotalDuration();
+                });
+                input.addEventListener('input', (e) => {
+                    const slideIndex = parseInt(e.target.dataset.slide);
+                    const newDuration = parseInt(e.target.value) || 5;
+                    slideDurations[slideIndex] = newDuration;
+                    updateTotalDuration();
+                });
+            }
+
+            updateTotalDuration();
+        }
+
+        function updateTotalDuration() {
+            const total = Object.values(slideDurations).reduce((sum, d) => sum + (d || 0), 0);
+            totalDurationEl.textContent = `${total}s`;
+        }
+
+        generateHtmlBtn.addEventListener('click', startHtmlConversion);
+
+        async function startHtmlConversion() {
+            if (!uploadedHtml) return;
+
+            const resolution = document.getElementById('htmlResolution').value.split('x');
+            const fps = parseInt(document.getElementById('htmlFps').value);
+
+            const customDurations = {};
+            document.querySelectorAll('[id^="slide-duration-"]').forEach(input => {
+                const slideIndex = parseInt(input.dataset.slide);
+                customDurations[slideIndex] = parseInt(input.value) || 5;
+            });
+
+            generateHtmlBtn.disabled = true;
+            htmlProgressContainer.classList.add('visible');
+            htmlProgressFill.style.width = '10%';
+            htmlProgressText.textContent = 'Starting conversion...';
+            htmlResultSection.classList.remove('visible');
+
+            try {
+                const response = await fetch('/html-to-mp4', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        html_id: uploadedHtml.id,
+                        width: parseInt(resolution[0]),
+                        height: parseInt(resolution[1]),
+                        fps: fps,
+                        custom_durations: customDurations
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    currentJobId = data.job_id;
+                    showHtmlStatus('Conversion started...', 'info');
+                    startHtmlPolling();
+                } else {
+                    showHtmlStatus(data.error || 'Failed to start conversion', 'error');
+                    generateHtmlBtn.disabled = false;
+                    htmlProgressContainer.classList.remove('visible');
+                }
+            } catch (error) {
+                showHtmlStatus('Error: ' + error.message, 'error');
+                generateHtmlBtn.disabled = false;
+                htmlProgressContainer.classList.remove('visible');
+            }
+        }
+
+        function startHtmlPolling() {
+            let progress = 10;
+            pollInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/html-to-mp4/status/${currentJobId}`);
+                    const data = await response.json();
+
+                    if (data.status === 'completed') {
+                        stopHtmlPolling();
+                        htmlProgressFill.style.width = '100%';
+                        htmlProgressText.textContent = 'Complete!';
+
+                        document.getElementById('resultSlides').textContent = data.result.slides || '-';
+                        document.getElementById('resultDuration').textContent = data.result.duration_s?.toFixed(1) || '-';
+                        document.getElementById('resultSize').textContent = data.result.size_mb?.toFixed(2) || '-';
+
+                        downloadHtmlBtn.onclick = () => {
+                            window.location.href = data.download_url;
+                        };
+
+                        htmlResultSection.classList.add('visible');
+                        showHtmlStatus('Conversion complete! Click Download to save.', 'success');
+                        generateHtmlBtn.disabled = false;
+
+                    } else if (data.status === 'failed') {
+                        stopHtmlPolling();
+                        showHtmlStatus('Conversion failed: ' + (data.error || 'Unknown error'), 'error');
+                        generateHtmlBtn.disabled = false;
+                        htmlProgressContainer.classList.remove('visible');
+
+                    } else {
+                        progress = Math.min(progress + 5, 90);
+                        htmlProgressFill.style.width = progress + '%';
+                        htmlProgressText.textContent = 'Converting... (' + progress + '%)';
+                    }
+                } catch (error) {
+                    console.error('Poll error:', error);
+                }
+            }, 1000);
+        }
+
+        function stopHtmlPolling() {
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+            }
+        }
+
+        clearHtmlBtn.addEventListener('click', async () => {
+            uploadedHtml = null;
+            currentJobId = null;
+            slideDurations = {};
+            stopHtmlPolling();
+
+            htmlFileInfo.classList.remove('visible');
+            slideDurationsSection.classList.remove('visible');
+            slideDurationsGrid.innerHTML = '';
+            htmlProgressContainer.classList.remove('visible');
+            htmlResultSection.classList.remove('visible');
+            generateHtmlBtn.disabled = true;
+            htmlStatusMsg.classList.remove('visible');
+            htmlFileInput.value = '';
+
+            try {
+                await fetch('/clear-html', { method: 'POST' });
+                showHtmlStatus('Cleared!', 'success');
+            } catch (error) {
+                console.error('Clear error:', error);
+            }
+        });
+
+        function showHtmlStatus(message, type) {
+            htmlStatusMsg.textContent = message;
+            htmlStatusMsg.className = 'status visible ' + type;
+            if (type === 'success') {
+                setTimeout(() => htmlStatusMsg.classList.remove('visible'), 3000);
+            }
+        }
+    </script>
+</body>
+</html>

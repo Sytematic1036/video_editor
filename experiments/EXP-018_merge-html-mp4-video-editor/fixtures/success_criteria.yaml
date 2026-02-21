@@ -1,0 +1,24 @@
+criteria:
+  - name: "GUI loads with both tabs"
+    test: "node tests/test_gui.js"
+    expected: "Both Video Editor and HTML to MP4 tabs visible"
+
+  - name: "Tab switching works"
+    test: "node tests/test_gui.js"
+    expected: "Clicking tabs switches content"
+
+  - name: "HTML upload works"
+    test: "node tests/test_gui.js"
+    expected: "HTML file can be uploaded and analyzed"
+
+  - name: "MP4 generation works"
+    test: "node tests/test_gui.js"
+    expected: "HTML converts to MP4 successfully"
+
+  - name: "Video Editor preserved"
+    test: "node tests/test_gui.js"
+    expected: "Video upload and preview still work"
+
+  - name: "Server starts without errors"
+    test: "python app.py (check for errors)"
+    expected: "Flask server starts on port 5022"
