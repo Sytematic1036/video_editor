@@ -1,0 +1,20 @@
+criteria:
+  - name: "All tracks have same width"
+    test: "node tests/test_timeline.js"
+    expected: "PASS"
+
+  - name: "Timeline extends to longest media"
+    test: "node tests/test_timeline.js"
+    expected: "PASS"
+
+  - name: "Playhead auto-scrolls into view"
+    test: "node tests/test_playhead.js"
+    expected: "PASS"
+
+  - name: "Playhead visible without files"
+    test: "node tests/test_playhead.js"
+    expected: "PASS"
+
+  - name: "Playhead has right margin during drag"
+    test: "node tests/test_playhead.js"
+    expected: "PASS"
