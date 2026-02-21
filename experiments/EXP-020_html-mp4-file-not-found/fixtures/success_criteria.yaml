@@ -1,0 +1,16 @@
+criteria:
+  - name: "HTML upload fungerar"
+    test: "curl -X POST -F 'file=@test.html' http://localhost:5022/html-upload"
+    expected: "success: true"
+
+  - name: "Konvertering slutfor"
+    test: "POST /html-to-mp4 och poll /html-to-mp4/status/<job_id>"
+    expected: "status: completed"
+
+  - name: "Download returnerar 200"
+    test: "GET /download/<filename>"
+    expected: "HTTP 200, Content-Type: video/mp4"
+
+  - name: "Playwright GUI-test passerar"
+    test: "node tests/test_html_to_mp4.js"
+    expected: "All tests passed"
