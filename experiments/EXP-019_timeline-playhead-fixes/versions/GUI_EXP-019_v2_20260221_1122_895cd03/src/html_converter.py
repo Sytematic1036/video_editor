@@ -1,0 +1,338 @@
+"""
+HTML to MP4 converter - v2 with per-slide durations support.
+Handles React-based presentations with SAVED_DURATIONS.
+"""
+import os
+import re
+import json
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
+from typing import Optional, Dict
+from dataclasses import dataclass, field
+
+
+@dataclass
+class ConversionSettings:
+    """Settings for HTML to MP4 conversion."""
+    width: int = 1920
+    height: int = 1080
+    fps: int = 2
+    default_seconds_per_slide: int = 5
+    max_slides: int = 50
+    crf: int = 18  # Quality (lower = better, 18-23 is good)
+
+
+@dataclass
+class ConversionResult:
+    """Result of HTML to MP4 conversion."""
+    success: bool
+    error: Optional[str] = None
+    slides: int = 0
+    frames: int = 0
+    duration_s: float = 0
+    size_mb: float = 0
+    output_path: str = ""
+    slide_durations: Dict[int, int] = field(default_factory=dict)
+
+
+def extract_saved_durations(html_content: str) -> Dict[int, int]:
+    """
+    Extract SAVED_DURATIONS from HTML file.
+    Looks for patterns like: SAVED_DURATIONS = {"0":16,"1":10,...}
+    Finds all matches and returns the one with the most entries.
+    """
+    all_durations = []
+
+    # Pattern for single-line JSON object (most common in minified/inline code)
+    # Matches: {"0":16,"1":10,"2":20,...}
+    inline_pattern = r'SAVED_DURATIONS\s*=\s*(\{[^{}]*?"[\d]+"\s*:\s*\d+[^{}]*?\})'
+
+    matches = re.findall(inline_pattern, html_content)
+    for match in matches:
+        try:
+            durations = json.loads(match)
+            if durations:  # Not empty
+                parsed = {int(k): int(v) for k, v in durations.items()}
+                all_durations.append(parsed)
+        except (json.JSONDecodeError, ValueError):
+            continue
+
+    # Also try multi-line pattern for formatted JSON
+    # This handles cases where the object spans multiple lines
+    multiline_pattern = r'SAVED_DURATIONS\s*=\s*\{([^;]*?)\}\s*;'
+    matches = re.findall(multiline_pattern, html_content, re.DOTALL)
+    for match in matches:
+        try:
+            # Try to parse as JSON object
+            json_str = '{' + match.strip() + '}'
+            # Clean up potential issues
+            json_str = re.sub(r',\s*}', '}', json_str)  # Remove trailing comma
+            durations = json.loads(json_str)
+            if durations:
+                parsed = {int(k): int(v) for k, v in durations.items()}
+                all_durations.append(parsed)
+        except (json.JSONDecodeError, ValueError):
+            continue
+
+    # Return the one with the most entries (most complete)
+    if all_durations:
+        return max(all_durations, key=len)
+
+    return {}
+
+
+def detect_total_slides(html_content: str) -> int:
+    """
+    Detect total number of slides from HTML.
+    Looks for NARRATIVES array or TOTAL_STEPS.
+    """
+    # Look for NARRATIVES array
+    match = re.search(r'NARRATIVES\s*=\s*\[(.*?)\]', html_content, re.DOTALL)
+    if match:
+        # Count elements (empty strings or content)
+        content = match.group(1)
+        # Count quotes pairs for empty strings
+        count = len(re.findall(r'["\']', content)) // 2
+        if count > 0:
+            return count
+
+    # Look for TOTAL_STEPS
+    match = re.search(r'TOTAL_STEPS\s*=\s*(\d+)', html_content)
+    if match:
+        return int(match.group(1)) + 1  # TOTAL_STEPS is usually length - 1
+
+    return -1  # Unknown
+
+
+def detect_current_slide(page) -> int:
+    """Detect current slide number from the page."""
+    try:
+        # Look for slide counter (e.g., "1/19")
+        counter = page.evaluate('''() => {
+            const text = document.body.innerText;
+            const match = text.match(/(\\d+)\\s*\\/\\s*(\\d+)/);
+            return match ? parseInt(match[1]) : null;
+        }''')
+        if counter:
+            return counter - 1  # Convert to 0-indexed
+    except:
+        pass
+    return -1
+
+
+def convert_html_to_mp4(
+    html_path: Path,
+    output_path: Path,
+    settings: Optional[ConversionSettings] = None,
+    custom_durations: Optional[Dict[int, int]] = None
+) -> ConversionResult:
+    """
+    Convert an HTML file to MP4 video with per-slide durations.
+
+    Args:
+        html_path: Path to the HTML file
+        output_path: Path for the output MP4 file
+        settings: Conversion settings
+        custom_durations: Optional dict of slide_index -> seconds.
+                          If provided, these override SAVED_DURATIONS from HTML.
+
+    Returns:
+        ConversionResult with details
+    """
+    if settings is None:
+        settings = ConversionSettings()
+
+    # Import playwright here to avoid import errors if not installed
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return ConversionResult(
+            success=False,
+            error='Playwright not installed. Run: pip install playwright && playwright install chromium'
+        )
+
+    # Check ffmpeg
+    try:
+        subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return ConversionResult(
+            success=False,
+            error='FFmpeg not found. Please install ffmpeg and add to PATH.'
+        )
+
+    # Read HTML and extract durations
+    html_content = html_path.read_text(encoding='utf-8')
+    saved_durations = extract_saved_durations(html_content)
+    total_slides = detect_total_slides(html_content)
+
+    # Use custom_durations if provided, otherwise use saved_durations
+    if custom_durations:
+        durations_to_use = custom_durations
+        print(f"[INFO] Using CUSTOM durations: {custom_durations}")
+    else:
+        durations_to_use = saved_durations
+        print(f"[INFO] Using SAVED durations from HTML: {saved_durations}")
+
+    print(f"[INFO] Detected {total_slides} total slides")
+
+    if total_slides == -1:
+        total_slides = settings.max_slides  # Fallback to max
+
+    # Create temp directory for frames
+    frame_dir = tempfile.mkdtemp(prefix='html2mp4_')
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(
+                headless=True,
+                args=['--no-sandbox', '--disable-setuid-sandbox']
+            )
+            page = browser.new_page(viewport={
+                'width': settings.width,
+                'height': settings.height
+            })
+
+            # Load HTML file
+            file_url = f'file://{html_path.absolute()}'
+            page.goto(file_url, wait_until='load', timeout=60000)
+            page.wait_for_timeout(3000)  # Wait for React to render
+
+            # Hide UI elements (dots, counter, controls)
+            page.evaluate('''() => {
+                const style = document.createElement('style');
+                style.textContent = `
+                    div[style*="border-top: 1px solid"] { display: none !important; }
+                    div[style*="position: absolute"][style*="top: 8px"][style*="right: 12px"] { display: none !important; }
+                    button { display: none !important; }
+                `;
+                document.head.appendChild(style);
+            }''')
+            page.wait_for_timeout(500)
+
+            frame_index = 0
+            slides_captured = 0
+            last_screenshot_hash = None
+            actual_durations = {}
+
+            # Capture frames for each slide
+            while slides_captured < total_slides:
+                # Get duration for this slide (use custom or saved durations)
+                duration = durations_to_use.get(slides_captured, settings.default_seconds_per_slide)
+                actual_durations[slides_captured] = duration
+                num_frames = duration * settings.fps
+
+                print(f"[INFO] Slide {slides_captured + 1}/{total_slides}: {duration}s ({num_frames} frames)")
+
+                # Take screenshot
+                frame_path = Path(frame_dir) / f'frame_{frame_index:05d}.png'
+                page.screenshot(path=str(frame_path), type='png')
+
+                # Check for duplicate (slide didn't change)
+                import hashlib
+                with open(frame_path, 'rb') as f:
+                    current_hash = hashlib.md5(f.read()).hexdigest()
+
+                if last_screenshot_hash is not None and current_hash == last_screenshot_hash:
+                    # Same as previous - we've reached the end
+                    frame_path.unlink()
+                    print(f"[INFO] Duplicate detected at slide {slides_captured}, stopping")
+                    break
+
+                last_screenshot_hash = current_hash
+                frame_index += 1
+
+                # Duplicate this frame for duration
+                for _ in range(num_frames - 1):
+                    dup_path = Path(frame_dir) / f'frame_{frame_index:05d}.png'
+                    shutil.copy(frame_path, dup_path)
+                    frame_index += 1
+
+                slides_captured += 1
+
+                # Navigate to next slide
+                if slides_captured < total_slides:
+                    page.keyboard.press('ArrowRight')
+                    page.wait_for_timeout(800)  # Wait for transition
+
+            browser.close()
+
+        if frame_index == 0:
+            return ConversionResult(
+                success=False,
+                error='No frames captured'
+            )
+
+        # Encode to MP4 with FFmpeg
+        ffmpeg_cmd = [
+            'ffmpeg', '-y',
+            '-framerate', str(settings.fps),
+            '-i', str(Path(frame_dir) / 'frame_%05d.png'),
+            '-c:v', 'libx264',
+            '-pix_fmt', 'yuv420p',
+            '-preset', 'medium',
+            '-crf', str(settings.crf),
+            '-movflags', '+faststart',
+            '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
+            str(output_path)
+        ]
+
+        print(f"[INFO] Running FFmpeg...")
+        result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+
+        if result.returncode != 0:
+            return ConversionResult(
+                success=False,
+                error=f'FFmpeg failed: {result.stderr[:500]}'
+            )
+
+        # Get output file size
+        size_mb = output_path.stat().st_size / (1024 * 1024)
+        duration_s = frame_index / settings.fps
+
+        print(f"[INFO] Done! {slides_captured} slides, {duration_s:.1f}s, {size_mb:.1f} MB")
+
+        return ConversionResult(
+            success=True,
+            slides=slides_captured,
+            frames=frame_index,
+            duration_s=duration_s,
+            size_mb=round(size_mb, 2),
+            output_path=str(output_path),
+            slide_durations=actual_durations
+        )
+
+    except Exception as e:
+        import traceback
+        return ConversionResult(
+            success=False,
+            error=f'{str(e)}\n{traceback.format_exc()}'
+        )
+    finally:
+        # Cleanup temp directory
+        shutil.rmtree(frame_dir, ignore_errors=True)
+
+
+if __name__ == '__main__':
+    # Test conversion
+    import sys
+    if len(sys.argv) < 2:
+        print('Usage: python html_converter.py <input.html> [output.mp4]')
+        sys.exit(1)
+
+    input_path = Path(sys.argv[1])
+    output_path = Path(sys.argv[2]) if len(sys.argv) > 2 else input_path.with_suffix('.mp4')
+
+    print(f'Converting {input_path} to {output_path}...')
+    result = convert_html_to_mp4(input_path, output_path)
+
+    if result.success:
+        print(f"\nSuccess!")
+        print(f"  Slides: {result.slides}")
+        print(f"  Duration: {result.duration_s:.1f}s")
+        print(f"  Size: {result.size_mb:.1f} MB")
+        print(f"  Per-slide durations: {result.slide_durations}")
+    else:
+        print(f"Error: {result.error}")
+        sys.exit(1)
