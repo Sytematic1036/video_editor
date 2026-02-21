@@ -212,7 +212,8 @@ def convert_html_to_mp4(
     html_path: Path,
     output_path: Path,
     settings: Optional[ConversionSettings] = None,
-    custom_durations: Optional[Dict[int, int]] = None
+    custom_durations: Optional[Dict[int, int]] = None,
+    include_audio: bool = False  # EXP-021: Default off
 ) -> ConversionResult:
     """
     Convert an HTML file to MP4 video with per-slide durations.
@@ -223,6 +224,8 @@ def convert_html_to_mp4(
         settings: Conversion settings
         custom_durations: Optional dict of slide_index -> seconds.
                           If provided, these override SAVED_DURATIONS from HTML.
+        include_audio: EXP-021 - If True, extract and include audio from HTML.
+                       Default is False (no audio).
 
     Returns:
         ConversionResult with details
@@ -254,14 +257,19 @@ def convert_html_to_mp4(
     total_slides = detect_total_slides(html_content)
 
     # EXP-020 v2: Extract audio from HTML
-    audio_data = extract_audio_data(html_content)
+    # EXP-021: Only extract if include_audio=True
+    audio_data = None
     audio_temp_path = None
-    if audio_data:
-        audio_temp_path = Path(tempfile.mktemp(suffix='.mp3', prefix='html2mp4_audio_'))
-        audio_temp_path.write_bytes(audio_data)
-        print(f"[INFO] Extracted audio: {len(audio_data) / 1024 / 1024:.1f} MB")
+    if include_audio:
+        audio_data = extract_audio_data(html_content)
+        if audio_data:
+            audio_temp_path = Path(tempfile.mktemp(suffix='.mp3', prefix='html2mp4_audio_'))
+            audio_temp_path.write_bytes(audio_data)
+            print(f"[INFO] Extracted audio: {len(audio_data) / 1024 / 1024:.1f} MB")
+        else:
+            print("[INFO] No embedded audio found in HTML")
     else:
-        print("[INFO] No embedded audio found in HTML")
+        print("[INFO] Audio extraction skipped (include_audio=False)")
 
     # Use custom_durations if provided, otherwise use saved_durations
     if custom_durations:

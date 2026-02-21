@@ -1,0 +1,20 @@
+criteria:
+  - name: "Checkbox exists in GUI"
+    test: "node tests/test_audio_checkbox.js"
+    expected: "Test 3 passes"
+
+  - name: "Checkbox unchecked by default"
+    test: "node tests/test_audio_checkbox.js"
+    expected: "Test 3 passes"
+
+  - name: "Conversion works with include_audio=false"
+    test: "node tests/test_audio_checkbox.js"
+    expected: "Tests 5-6 pass"
+
+  - name: "MP4 has no audio when include_audio=false"
+    test: "ffprobe -v quiet -print_format json -show_streams output.mp4"
+    expected: "No audio streams"
+
+  - name: "Checkbox can be toggled"
+    test: "node tests/test_audio_checkbox.js"
+    expected: "Test 8 passes"

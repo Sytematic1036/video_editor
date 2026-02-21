@@ -539,7 +539,10 @@ def html_upload():
 
 @app.route('/html-to-mp4', methods=['POST'])
 def html_to_mp4():
-    """Start HTML to MP4 conversion with custom durations."""
+    """Start HTML to MP4 conversion with custom durations.
+
+    EXP-021: Added include_audio parameter (default: False).
+    """
     data = request.json
     html_id = data.get('html_id')
 
@@ -554,6 +557,7 @@ def html_to_mp4():
     height = int(data.get('height', 1080))
     fps = int(data.get('fps', 2))
     default_seconds = int(data.get('seconds_per_slide', 5))
+    include_audio = data.get('include_audio', False)  # EXP-021: Default off
 
     custom_durations = data.get('custom_durations', None)
     if custom_durations:
@@ -583,7 +587,8 @@ def html_to_mp4():
                 html_path,
                 output_path,
                 settings,
-                custom_durations=custom_durations
+                custom_durations=custom_durations,
+                include_audio=include_audio  # EXP-021
             )
             if result.success:
                 conversion_jobs[job_id]['status'] = 'completed'
