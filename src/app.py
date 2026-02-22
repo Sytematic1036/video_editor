@@ -710,7 +710,7 @@ def copy_html():
     """Copy the current HTML file with a timestamp in the filename.
 
     EXP-024: Allows saving HTML files with slide duration edits.
-    Creates a copy in html_uploads/ with format: originalname_YYYY-MM-DD_HHMMSS.html
+    EXP-025 v2: Returns download URL instead of just saving.
     """
     data = request.json
     html_id = data.get('html_id')
@@ -742,12 +742,33 @@ def copy_html():
     import shutil
     shutil.copy2(html_path, new_path)
 
+    # EXP-025 v2: Return download URL
     return jsonify({
         'success': True,
         'filename': new_filename,
-        'path': str(new_path),
-        'message': f'HTML copy saved as {new_filename}'
+        'download_url': url_for('download_html_copy', filename=new_filename),
+        'message': f'HTML copy ready for download'
     })
+
+
+@app.route('/download-html/<filename>')
+def download_html_copy(filename):
+    """Download an HTML copy file.
+
+    EXP-025 v2: Allows downloading HTML files to user's Downloads folder.
+    """
+    safe_filename = secure_filename(filename)
+    filepath = HTML_DIR / safe_filename
+
+    if not filepath.exists():
+        return jsonify({'error': 'File not found'}), 404
+
+    return send_file(
+        filepath,
+        mimetype='text/html',
+        as_attachment=True,
+        download_name=safe_filename,
+    )
 
 
 if __name__ == '__main__':

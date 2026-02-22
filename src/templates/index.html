@@ -1296,7 +1296,7 @@
                 <!-- Action Buttons -->
                 <div class="html-btn-row">
                     <button class="btn-export-final" id="generateHtmlBtn" disabled>Generate MP4</button>
-                    <button class="btn-secondary" id="copyHtmlBtn" disabled>Generate HTML Copy</button>
+                    <button class="btn-secondary" id="copyHtmlBtn" disabled>Download HTML Copy</button>
                     <button class="btn-cleanup" id="clearHtmlBtn">Clear</button>
                 </div>
 
@@ -3945,6 +3945,7 @@
         });
 
         // EXP-024: Generate HTML Copy button
+        // EXP-025 v2: Download HTML copy instead of just saving
         copyHtmlBtn.addEventListener('click', async () => {
             if (!uploadedHtml || !uploadedHtml.id) {
                 showHtmlStatus('No HTML file to copy', 'error');
@@ -3952,6 +3953,9 @@
             }
 
             try {
+                copyHtmlBtn.disabled = true;
+                copyHtmlBtn.textContent = 'Preparing...';
+
                 const response = await fetch('/copy-html', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -3959,13 +3963,18 @@
                 });
                 const data = await response.json();
 
-                if (data.success) {
-                    showHtmlStatus(`HTML copy saved: ${data.filename}`, 'success');
+                if (data.success && data.download_url) {
+                    // Trigger browser download
+                    window.location.href = data.download_url;
+                    showHtmlStatus(`Downloading: ${data.filename}`, 'success');
                 } else {
                     showHtmlStatus(data.error || 'Failed to copy HTML', 'error');
                 }
             } catch (error) {
                 showHtmlStatus('Error: ' + error.message, 'error');
+            } finally {
+                copyHtmlBtn.disabled = false;
+                copyHtmlBtn.textContent = 'Download HTML Copy';
             }
         });
 
