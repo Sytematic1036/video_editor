@@ -1,0 +1,36 @@
+criteria:
+  - name: "Rubriken visar 'Slide Start Times'"
+    test: "node tests/test_simple.js | grep 'Test 3'"
+    expected: "PASS"
+    status: PASS
+
+  - name: "Första slide visar 0:00"
+    test: "node tests/test_simple.js | grep 'Test 6'"
+    expected: "PASS"
+    status: PASS
+
+  - name: "Starttider är kumulativa"
+    test: "node tests/test_simple.js | grep 'Test 7'"
+    expected: "PASS"
+    status: PASS
+
+  - name: "Ändra duration uppdaterar starttider"
+    test: "node tests/test_simple.js | grep 'Test 8'"
+    expected: "PASS"
+    status: PASS
+
+  - name: "Format hanterar > 60 sekunder"
+    test: "node tests/test_simple.js | grep 'Test 9'"
+    expected: "PASS (visar 1:15 för 75 sek)"
+    status: PASS
+
+  - name: "Duration-inputs fungerar"
+    test: "node tests/test_simple.js | grep 'Test 10'"
+    expected: "PASS"
+    status: PASS
+
+summary:
+  total_tests: 10
+  passed: 10
+  failed: 0
+  status: VERIFIED
