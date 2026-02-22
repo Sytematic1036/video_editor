@@ -1,0 +1,20 @@
+criteria:
+  - name: "Upload Audio button visible in HTML-to-MP4 tab"
+    test: "Playwright: check for upload button"
+    expected: "Button is visible and clickable"
+
+  - name: "Can upload MP3 file"
+    test: "Playwright: upload test.mp3"
+    expected: "File uploads successfully, filename shown"
+
+  - name: "External audio included in MP4"
+    test: "ffprobe output.mp4"
+    expected: "Audio stream present in output"
+
+  - name: "External audio prioritized over HTML audio"
+    test: "Convert with both external audio and include_audio=True"
+    expected: "External audio used, not HTML audio"
+
+  - name: "Longest file determines MP4 length"
+    test: "5s video + 10s audio → 10s MP4"
+    expected: "Output is 10 seconds"
