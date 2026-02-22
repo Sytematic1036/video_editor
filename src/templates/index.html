@@ -913,6 +913,13 @@
         }
         .slide-duration-item input:focus { outline: none; border-color: #00d9ff; }
         .slide-duration-item span { font-size: 12px; color: #666; }
+        .slide-duration-item .start-time-label {
+            font-size: 14px;
+            font-weight: bold;
+            color: #00d9ff;
+            min-width: 45px;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
         .total-duration {
             display: flex;
             justify-content: space-between;
@@ -1224,7 +1231,7 @@
 
                 <!-- Slide Durations Section -->
                 <div class="slide-durations-section" id="slideDurationsSection">
-                    <h3>Slide Durations (seconds per slide)</h3>
+                    <h3>Slide Start Times</h3>
                     <div class="slide-durations-grid" id="slideDurationsGrid"></div>
                     <div class="total-duration">
                         <span class="label">Total Duration:</span>
@@ -3653,6 +3660,13 @@
             }
         }
 
+        // Format seconds to mm:ss (e.g., 65 -> "1:05", 3 -> "0:03")
+        function formatStartTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
         function renderSlideDurations(totalSlides, durations) {
             slideDurationsGrid.innerHTML = '';
 
@@ -3663,7 +3677,7 @@
                 const item = document.createElement('div');
                 item.className = 'slide-duration-item';
                 item.innerHTML = `
-                    <label>Slide ${i + 1}:</label>
+                    <label class="start-time-label" id="start-time-${i}">0:00</label>
                     <input type="number" id="slide-duration-${i}" value="${duration}" min="1" max="120" data-slide="${i}">
                     <span>s</span>
                 `;
@@ -3673,14 +3687,31 @@
                 input.addEventListener('change', (e) => {
                     slideDurations[parseInt(e.target.dataset.slide)] = parseInt(e.target.value) || 5;
                     updateTotalDuration();
+                    updateStartTimes();
                 });
                 input.addEventListener('input', (e) => {
                     slideDurations[parseInt(e.target.dataset.slide)] = parseInt(e.target.value) || 5;
                     updateTotalDuration();
+                    updateStartTimes();
                 });
             }
 
             updateTotalDuration();
+            updateStartTimes();
+        }
+
+        // Update all start time labels based on cumulative durations
+        function updateStartTimes() {
+            let cumulativeTime = 0;
+            const totalSlides = Object.keys(slideDurations).length;
+
+            for (let i = 0; i < totalSlides; i++) {
+                const label = document.getElementById(`start-time-${i}`);
+                if (label) {
+                    label.textContent = formatStartTime(cumulativeTime);
+                }
+                cumulativeTime += slideDurations[i] || 5;
+            }
         }
 
         function updateTotalDuration() {
