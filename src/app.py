@@ -537,11 +537,54 @@ def html_upload():
     })
 
 
+# ============================================================
+# EXP-025: Upload Audio for HTML-to-MP4
+# ============================================================
+
+@app.route('/upload-html-audio', methods=['POST'])
+def upload_html_audio():
+    """Upload an audio file for HTML-to-MP4 conversion.
+
+    EXP-025: Allows uploading external audio (MP3/WAV) to be used
+    instead of embedded HTML audio.
+    """
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+
+    filename = secure_filename(file.filename)
+    suffix = Path(filename).suffix.lower()
+
+    if suffix not in AUDIO_EXTENSIONS:
+        return jsonify({'error': f'Only audio files supported ({", ".join(AUDIO_EXTENSIONS)}), got {suffix}'}), 400
+
+    unique_name = f"html_audio_{uuid.uuid4().hex[:8]}_{filename}"
+    filepath = UPLOAD_DIR / unique_name
+    file.save(filepath)
+
+    try:
+        duration = ffprobe_duration_seconds(filepath)
+    except Exception:
+        duration = 0
+
+    return jsonify({
+        'success': True,
+        'id': unique_name,
+        'filename': filename,
+        'path': str(filepath),
+        'duration': round(duration, 2),
+    })
+
+
 @app.route('/html-to-mp4', methods=['POST'])
 def html_to_mp4():
     """Start HTML to MP4 conversion with custom durations.
 
     EXP-021: Added include_audio parameter (default: False).
+    EXP-025: Added external_audio_id parameter for external audio.
     """
     data = request.json
     html_id = data.get('html_id')
@@ -558,10 +601,18 @@ def html_to_mp4():
     fps = int(data.get('fps', 2))
     default_seconds = int(data.get('seconds_per_slide', 5))
     include_audio = data.get('include_audio', False)  # EXP-021: Default off
+    external_audio_id = data.get('external_audio_id')  # EXP-025: External audio
 
     custom_durations = data.get('custom_durations', None)
     if custom_durations:
         custom_durations = {int(k): int(v) for k, v in custom_durations.items()}
+
+    # EXP-025: Get external audio path if provided
+    external_audio_path = None
+    if external_audio_id:
+        external_audio_path = UPLOAD_DIR / secure_filename(external_audio_id)
+        if not external_audio_path.exists():
+            return jsonify({'error': 'External audio file not found'}), 404
 
     settings = ConversionSettings(
         width=width,
@@ -588,7 +639,8 @@ def html_to_mp4():
                 output_path,
                 settings,
                 custom_durations=custom_durations,
-                include_audio=include_audio  # EXP-021
+                include_audio=include_audio,  # EXP-021
+                external_audio_path=external_audio_path  # EXP-025
             )
             if result.success:
                 conversion_jobs[job_id]['status'] = 'completed'

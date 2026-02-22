@@ -192,6 +192,22 @@ def detect_total_slides(html_content: str) -> int:
     return -1  # Unknown
 
 
+def get_audio_duration(audio_path: Path) -> float:
+    """Get duration of audio file in seconds using ffprobe."""
+    try:
+        result = subprocess.run([
+            'ffprobe', '-v', 'error',
+            '-show_entries', 'format=duration',
+            '-of', 'csv=p=0',
+            str(audio_path)
+        ], capture_output=True, text=True)
+        if result.returncode == 0:
+            return float(result.stdout.strip())
+    except (subprocess.CalledProcessError, ValueError):
+        pass
+    return 0.0
+
+
 def detect_current_slide(page) -> int:
     """Detect current slide number from the page."""
     try:
@@ -213,7 +229,8 @@ def convert_html_to_mp4(
     output_path: Path,
     settings: Optional[ConversionSettings] = None,
     custom_durations: Optional[Dict[int, int]] = None,
-    include_audio: bool = False  # EXP-021: Default off
+    include_audio: bool = False,  # EXP-021: Default off
+    external_audio_path: Optional[Path] = None  # EXP-025: External audio file
 ) -> ConversionResult:
     """
     Convert an HTML file to MP4 video with per-slide durations.
@@ -226,6 +243,8 @@ def convert_html_to_mp4(
                           If provided, these override SAVED_DURATIONS from HTML.
         include_audio: EXP-021 - If True, extract and include audio from HTML.
                        Default is False (no audio).
+        external_audio_path: EXP-025 - Path to external audio file (MP3/WAV).
+                             If provided, this takes priority over HTML audio.
 
     Returns:
         ConversionResult with details
@@ -256,20 +275,28 @@ def convert_html_to_mp4(
     saved_durations = extract_saved_durations(html_content)
     total_slides = detect_total_slides(html_content)
 
-    # EXP-020 v2: Extract audio from HTML
-    # EXP-021: Only extract if include_audio=True
+    # EXP-025: Handle audio sources with priority
+    # Priority: 1) external_audio_path, 2) HTML embedded audio (if include_audio=True)
     audio_data = None
     audio_temp_path = None
-    if include_audio:
+    audio_is_external = False
+
+    if external_audio_path and external_audio_path.exists():
+        # EXP-025: External audio takes priority
+        audio_temp_path = external_audio_path
+        audio_is_external = True
+        print(f"[INFO] Using external audio: {external_audio_path}")
+    elif include_audio:
+        # EXP-021: Extract from HTML if include_audio=True
         audio_data = extract_audio_data(html_content)
         if audio_data:
             audio_temp_path = Path(tempfile.mktemp(suffix='.mp3', prefix='html2mp4_audio_'))
             audio_temp_path.write_bytes(audio_data)
-            print(f"[INFO] Extracted audio: {len(audio_data) / 1024 / 1024:.1f} MB")
+            print(f"[INFO] Extracted audio from HTML: {len(audio_data) / 1024 / 1024:.1f} MB")
         else:
             print("[INFO] No embedded audio found in HTML")
     else:
-        print("[INFO] Audio extraction skipped (include_audio=False)")
+        print("[INFO] No audio will be included")
 
     # Use custom_durations if provided, otherwise use saved_durations
     if custom_durations:
@@ -362,28 +389,59 @@ def convert_html_to_mp4(
             )
 
         # Encode to MP4 with FFmpeg
-        # EXP-020 v2: Include audio if extracted
+        # EXP-025: Include audio, use longest stream duration
         if audio_temp_path and audio_temp_path.exists():
-            # With audio: mux video and audio together
-            ffmpeg_cmd = [
-                'ffmpeg', '-y',
-                '-framerate', str(settings.fps),
-                '-i', str(Path(frame_dir) / 'frame_%05d.png'),
-                '-i', str(audio_temp_path),
-                '-c:v', 'libx264',
-                '-c:a', 'aac',
-                '-b:a', '192k',
-                '-pix_fmt', 'yuv420p',
-                '-preset', 'medium',
-                '-crf', str(settings.crf),
-                '-movflags', '+faststart',
-                '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
-                '-shortest',  # End when shortest stream ends
-                '-map', '0:v:0',  # Video from first input
-                '-map', '1:a:0',  # Audio from second input
-                str(output_path)
-            ]
-            print(f"[INFO] Running FFmpeg with audio...")
+            # Get audio duration to check if we need to extend video
+            audio_duration = get_audio_duration(audio_temp_path)
+            video_duration = frame_index / settings.fps
+
+            print(f"[INFO] Video duration: {video_duration:.1f}s, Audio duration: {audio_duration:.1f}s")
+
+            if audio_duration > video_duration:
+                # EXP-025: Audio is longer - use tpad to extend last frame
+                pad_duration = audio_duration - video_duration
+                print(f"[INFO] Extending video by {pad_duration:.1f}s to match audio")
+
+                ffmpeg_cmd = [
+                    'ffmpeg', '-y',
+                    '-framerate', str(settings.fps),
+                    '-i', str(Path(frame_dir) / 'frame_%05d.png'),
+                    '-i', str(audio_temp_path),
+                    '-filter_complex',
+                    f'[0:v]scale=trunc(iw/2)*2:trunc(ih/2)*2,tpad=stop_mode=clone:stop_duration={pad_duration}[v]',
+                    '-map', '[v]',
+                    '-map', '1:a:0',
+                    '-c:v', 'libx264',
+                    '-c:a', 'aac',
+                    '-b:a', '192k',
+                    '-pix_fmt', 'yuv420p',
+                    '-preset', 'medium',
+                    '-crf', str(settings.crf),
+                    '-movflags', '+faststart',
+                    '-shortest',  # Now use shortest since we've extended video
+                    str(output_path)
+                ]
+            else:
+                # Video is longer or equal - standard muxing
+                ffmpeg_cmd = [
+                    'ffmpeg', '-y',
+                    '-framerate', str(settings.fps),
+                    '-i', str(Path(frame_dir) / 'frame_%05d.png'),
+                    '-i', str(audio_temp_path),
+                    '-c:v', 'libx264',
+                    '-c:a', 'aac',
+                    '-b:a', '192k',
+                    '-pix_fmt', 'yuv420p',
+                    '-preset', 'medium',
+                    '-crf', str(settings.crf),
+                    '-movflags', '+faststart',
+                    '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
+                    '-map', '0:v:0',
+                    '-map', '1:a:0',
+                    str(output_path)
+                ]
+
+            print(f"[INFO] Running FFmpeg with audio (longest stream wins)...")
         else:
             # Without audio: video only
             ffmpeg_cmd = [
@@ -408,11 +466,17 @@ def convert_html_to_mp4(
                 error=f'FFmpeg failed: {result.stderr[:500]}'
             )
 
-        # Get output file size
+        # Get output file size and actual duration
         size_mb = output_path.stat().st_size / (1024 * 1024)
-        duration_s = frame_index / settings.fps
 
-        has_audio = audio_temp_path is not None and audio_data is not None
+        # EXP-025: Get actual output duration (might be extended for audio)
+        actual_duration = get_audio_duration(output_path)  # Works for video too
+        if actual_duration == 0:
+            actual_duration = frame_index / settings.fps  # Fallback
+        duration_s = actual_duration
+
+        # EXP-025: Check if audio was included (either external or extracted)
+        has_audio = audio_temp_path is not None and audio_temp_path.exists()
         print(f"[INFO] Done! {slides_captured} slides, {duration_s:.1f}s, {size_mb:.1f} MB, audio={has_audio}")
 
         return ConversionResult(
@@ -433,9 +497,10 @@ def convert_html_to_mp4(
             error=f'{str(e)}\n{traceback.format_exc()}'
         )
     finally:
-        # Cleanup temp directory and audio file
+        # Cleanup temp directory and extracted audio (but NOT external audio)
         shutil.rmtree(frame_dir, ignore_errors=True)
-        if audio_temp_path and audio_temp_path.exists():
+        # EXP-025: Only delete audio if it was extracted from HTML (not external)
+        if audio_temp_path and audio_temp_path.exists() and not audio_is_external:
             try:
                 audio_temp_path.unlink()
             except Exception:
