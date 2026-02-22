@@ -649,6 +649,55 @@ def clear_html():
     return jsonify({'success': True})
 
 
+# ============================================================
+# EXP-024: Generate HTML Copy
+# ============================================================
+
+@app.route('/copy-html', methods=['POST'])
+def copy_html():
+    """Copy the current HTML file with a timestamp in the filename.
+
+    EXP-024: Allows saving HTML files with slide duration edits.
+    Creates a copy in html_uploads/ with format: originalname_YYYY-MM-DD_HHMMSS.html
+    """
+    data = request.json
+    html_id = data.get('html_id')
+
+    if not html_id:
+        return jsonify({'error': 'No html_id provided'}), 400
+
+    html_path = HTML_DIR / secure_filename(html_id)
+    if not html_path.exists():
+        return jsonify({'error': 'HTML file not found'}), 404
+
+    # Get original filename without UUID prefix
+    original_name = html_id
+    if '_' in original_name:
+        # Remove UUID prefix (e.g., "abc12345_original.html" -> "original.html")
+        original_name = '_'.join(original_name.split('_')[1:])
+
+    # Remove .html extension for the base name
+    base_name = original_name.rsplit('.html', 1)[0] if original_name.endswith('.html') else original_name
+
+    # Create timestamp
+    timestamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
+
+    # Create new filename
+    new_filename = f"{base_name}_{timestamp}.html"
+    new_path = HTML_DIR / new_filename
+
+    # Copy the file
+    import shutil
+    shutil.copy2(html_path, new_path)
+
+    return jsonify({
+        'success': True,
+        'filename': new_filename,
+        'path': str(new_path),
+        'message': f'HTML copy saved as {new_filename}'
+    })
+
+
 if __name__ == '__main__':
     print("=" * 60)
     print("Video Editor + HTML to MP4")

@@ -817,6 +817,21 @@
         }
         .btn-cleanup:hover { background: #5a5a6a; }
 
+        /* EXP-024: Secondary button for HTML copy */
+        .btn-secondary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            font-weight: bold;
+            padding: 15px 30px;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-secondary:hover { background: linear-gradient(135deg, #7a8ff0 0%, #8a5bb8 100%); transform: scale(1.02); }
+        .btn-secondary:disabled { background: #444; color: #888; cursor: not-allowed; transform: none; }
+
         /* ==================== TAB NAVIGATION ==================== */
         .main-tab-nav {
             display: flex;
@@ -1264,6 +1279,7 @@
                 <!-- Action Buttons -->
                 <div class="html-btn-row">
                     <button class="btn-export-final" id="generateHtmlBtn" disabled>Generate MP4</button>
+                    <button class="btn-secondary" id="copyHtmlBtn" disabled>Generate HTML Copy</button>
                     <button class="btn-cleanup" id="clearHtmlBtn">Clear</button>
                 </div>
 
@@ -3590,6 +3606,7 @@
         const slideDurationsGrid = document.getElementById('slideDurationsGrid');
         const totalDurationEl = document.getElementById('totalDuration');
         const generateHtmlBtn = document.getElementById('generateHtmlBtn');
+        const copyHtmlBtn = document.getElementById('copyHtmlBtn');  // EXP-024
         const clearHtmlBtn = document.getElementById('clearHtmlBtn');
         const htmlProgressContainer = document.getElementById('htmlProgressContainer');
         const htmlProgressFill = document.getElementById('htmlProgressFill');
@@ -3651,6 +3668,7 @@
                     slideDurationsSection.classList.add('visible');
 
                     generateHtmlBtn.disabled = false;
+                    copyHtmlBtn.disabled = false;  // EXP-024
                     showHtmlStatus(`Uploaded: ${data.total_slides} slides, ${data.total_duration}s total`, 'success');
                 } else {
                     showHtmlStatus(data.error || 'Upload failed', 'error');
@@ -3830,6 +3848,7 @@
             htmlProgressContainer.classList.remove('visible');
             htmlResultSection.classList.remove('visible');
             generateHtmlBtn.disabled = true;
+            copyHtmlBtn.disabled = true;  // EXP-024
             htmlStatusMsg.classList.remove('visible');
             htmlFileInput.value = '';
 
@@ -3838,6 +3857,31 @@
                 showHtmlStatus('Cleared!', 'success');
             } catch (error) {
                 console.error('Clear error:', error);
+            }
+        });
+
+        // EXP-024: Generate HTML Copy button
+        copyHtmlBtn.addEventListener('click', async () => {
+            if (!uploadedHtml || !uploadedHtml.id) {
+                showHtmlStatus('No HTML file to copy', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/copy-html', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ html_id: uploadedHtml.id })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    showHtmlStatus(`HTML copy saved: ${data.filename}`, 'success');
+                } else {
+                    showHtmlStatus(data.error || 'Failed to copy HTML', 'error');
+                }
+            } catch (error) {
+                showHtmlStatus('Error: ' + error.message, 'error');
             }
         });
 

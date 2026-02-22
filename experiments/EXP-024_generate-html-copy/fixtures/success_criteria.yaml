@@ -1,0 +1,20 @@
+criteria:
+  - name: "Knappen visas i HTML to MP4-tabben"
+    test: "Playwright selector #copyHtmlBtn exists"
+    expected: "Knappen finns och är synlig"
+
+  - name: "Knappen disabled utan HTML"
+    test: "Playwright check button.disabled before upload"
+    expected: "copyHtmlBtn.disabled === true"
+
+  - name: "Knappen enabled efter upload"
+    test: "Playwright upload HTML then check button"
+    expected: "copyHtmlBtn.disabled === false"
+
+  - name: "Kopia skapas med rätt namn"
+    test: "Click button, check html_uploads/ for new file"
+    expected: "File exists matching pattern *_YYYY-MM-DD_HHMMSS.html"
+
+  - name: "Statusmeddelande visas"
+    test: "Check #htmlStatusMsg after copy"
+    expected: "Contains success message with filename"
