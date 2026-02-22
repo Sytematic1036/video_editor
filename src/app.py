@@ -651,7 +651,7 @@ def clear_html():
 
 if __name__ == '__main__':
     print("=" * 60)
-    print("Video Editor + HTML to MP4 - EXP-018 v2")
+    print("Video Editor + HTML to MP4")
     print("=" * 60)
     print(f"Upload: {UPLOAD_DIR}")
     print(f"Output: {OUTPUT_DIR}")

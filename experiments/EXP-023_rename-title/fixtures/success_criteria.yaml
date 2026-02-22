@@ -1,0 +1,15 @@
+criteria:
+  - name: "HTML title korrekt"
+    test: "curl -s http://localhost:5022 | grep '<title>Video Editor + HTML to MP4</title>'"
+    expected: "Matchar exakt utan EXP-versionnummer"
+    status: PASS
+
+  - name: "H1 rubrik korrekt"
+    test: "curl -s http://localhost:5022 | grep '<h1>Video Editor + HTML to MP4</h1>'"
+    expected: "Matchar exakt utan EXP-versionnummer"
+    status: PASS
+
+  - name: "Playwright-test passerar"
+    test: "node test_title.js"
+    expected: "ALL TESTS PASSED"
+    status: PASS
