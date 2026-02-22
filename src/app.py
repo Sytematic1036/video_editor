@@ -20,7 +20,8 @@ from html_converter import (
     convert_html_to_mp4,
     ConversionSettings,
     extract_saved_durations,
-    detect_total_slides
+    detect_total_slides,
+    update_html_durations  # EXP-025 v3
 )
 
 app = Flask(__name__)
@@ -711,9 +712,11 @@ def copy_html():
 
     EXP-024: Allows saving HTML files with slide duration edits.
     EXP-025 v2: Returns download URL instead of just saving.
+    EXP-025 v3: Saves custom durations into the HTML copy.
     """
     data = request.json
     html_id = data.get('html_id')
+    custom_durations = data.get('custom_durations')  # EXP-025 v3
 
     if not html_id:
         return jsonify({'error': 'No html_id provided'}), 400
@@ -738,9 +741,16 @@ def copy_html():
     new_filename = f"{base_name}_{timestamp}.html"
     new_path = HTML_DIR / new_filename
 
-    # Copy the file
-    import shutil
-    shutil.copy2(html_path, new_path)
+    # EXP-025 v3: Read, update durations, and write
+    html_content = html_path.read_text(encoding='utf-8')
+
+    if custom_durations:
+        # Convert string keys to int
+        durations_dict = {int(k): int(v) for k, v in custom_durations.items()}
+        html_content = update_html_durations(html_content, durations_dict)
+
+    # Write updated content
+    new_path.write_text(html_content, encoding='utf-8')
 
     # EXP-025 v2: Return download URL
     return jsonify({

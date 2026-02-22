@@ -3946,6 +3946,7 @@
 
         // EXP-024: Generate HTML Copy button
         // EXP-025 v2: Download HTML copy instead of just saving
+        // EXP-025 v3: Include custom durations in download
         copyHtmlBtn.addEventListener('click', async () => {
             if (!uploadedHtml || !uploadedHtml.id) {
                 showHtmlStatus('No HTML file to copy', 'error');
@@ -3956,17 +3957,21 @@
                 copyHtmlBtn.disabled = true;
                 copyHtmlBtn.textContent = 'Preparing...';
 
+                // EXP-025 v3: Send current slide durations
                 const response = await fetch('/copy-html', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ html_id: uploadedHtml.id })
+                    body: JSON.stringify({
+                        html_id: uploadedHtml.id,
+                        custom_durations: slideDurations  // Include edited durations
+                    })
                 });
                 const data = await response.json();
 
                 if (data.success && data.download_url) {
                     // Trigger browser download
                     window.location.href = data.download_url;
-                    showHtmlStatus(`Downloading: ${data.filename}`, 'success');
+                    showHtmlStatus(`Downloading: ${data.filename} (with your durations)`, 'success');
                 } else {
                     showHtmlStatus(data.error || 'Failed to copy HTML', 'error');
                 }

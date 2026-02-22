@@ -77,6 +77,75 @@ def extract_slide_config(html_content: str) -> Dict[int, float]:
     return durations
 
 
+def update_html_durations(html_content: str, new_durations: Dict[int, float]) -> str:
+    """
+    Update slide durations in HTML content.
+    EXP-025 v3: Replaces durations in SLIDE_CONFIG, SLIDES, or SAVED_DURATIONS.
+
+    Args:
+        html_content: Original HTML content
+        new_durations: Dict of slide_index -> new duration in seconds
+
+    Returns:
+        Updated HTML content with new durations
+    """
+    updated_content = html_content
+
+    # Try to update SLIDE_CONFIG or SLIDES format first
+    for var_name in ['SLIDE_CONFIG', 'SLIDES']:
+        config_pattern = rf'(var\s+{var_name}\s*=\s*\[)(.*?)(\];)'
+        match = re.search(config_pattern, updated_content, re.DOTALL)
+
+        if match:
+            prefix = match.group(1)
+            config_content = match.group(2)
+            suffix = match.group(3)
+
+            # Replace each duration value
+            def replace_duration(m):
+                # Find which slide index this is
+                # Count how many complete objects appear before this match
+                before_text = config_content[:m.start()]
+                slide_idx = before_text.count('{')
+
+                if slide_idx in new_durations:
+                    new_dur = int(new_durations[slide_idx])
+                    # Preserve the object structure, just replace duration value
+                    obj_content = m.group(0)
+                    return re.sub(r'(duration\s*:\s*)[\d.]+', rf'\g<1>{new_dur}', obj_content)
+                return m.group(0)
+
+            new_config = re.sub(r'\{[^}]*?duration\s*:\s*[\d.]+[^}]*?\}', replace_duration, config_content)
+            updated_content = updated_content[:match.start()] + prefix + new_config + suffix + updated_content[match.end():]
+
+            print(f"[INFO] Updated {var_name} with new durations")
+            return updated_content
+
+    # Fall back to SAVED_DURATIONS format
+    saved_pattern = r'(SAVED_DURATIONS\s*=\s*)(\{[^}]*\})'
+    match = re.search(saved_pattern, updated_content)
+
+    if match:
+        # Create new SAVED_DURATIONS object
+        new_saved = json.dumps({str(k): int(v) for k, v in new_durations.items()})
+        updated_content = updated_content[:match.start()] + match.group(1) + new_saved + updated_content[match.end():]
+        print(f"[INFO] Updated SAVED_DURATIONS with new durations")
+        return updated_content
+
+    # If no duration format found, try to inject SAVED_DURATIONS before </script>
+    if new_durations:
+        saved_durations_str = json.dumps({str(k): int(v) for k, v in new_durations.items()})
+        inject_code = f'\n        var SAVED_DURATIONS = {saved_durations_str};\n    '
+
+        # Find last </script> tag
+        script_end = updated_content.rfind('</script>')
+        if script_end > 0:
+            updated_content = updated_content[:script_end] + inject_code + updated_content[script_end:]
+            print(f"[INFO] Injected SAVED_DURATIONS into HTML")
+
+    return updated_content
+
+
 def extract_audio_data(html_content: str) -> Optional[bytes]:
     """
     Extract AUDIO_DATA (base64 encoded) from HTML file.
