@@ -218,8 +218,11 @@ def serve_preview(filename):
 # ============================================================
 
 def run_export(job_id: str, video_clips: list, audio_track, speech_clips: list,
-               crossfade, speech_volume: float, output_path: Path):
-    """Background thread for export processing."""
+               crossfade, speech_volume: float, output_path: Path, audio_source: str = "editor"):
+    """Background thread for export processing.
+
+    EXP-026: Added audio_source parameter.
+    """
     try:
         export_jobs[job_id]['status'] = 'processing'
         export_jobs[job_id]['progress'] = 10
@@ -233,6 +236,7 @@ def run_export(job_id: str, video_clips: list, audio_track, speech_clips: list,
         export_jobs[job_id]['progress'] = 30
 
         # Actual export - concat_videos handles audio-only case
+        # EXP-026: Pass audio_source to control audio handling
         concat_videos(
             video_clips=video_clips,
             output_path=output_path,
@@ -241,6 +245,7 @@ def run_export(job_id: str, video_clips: list, audio_track, speech_clips: list,
             speech_clips=speech_clips if speech_clips else None,
             speech_volume=speech_volume,
             resolution=(1920, 1080),  # Full HD for final export
+            audio_source=audio_source,
         )
 
         export_jobs[job_id]['progress'] = 90
@@ -264,6 +269,7 @@ def start_export():
     """Start a final export job (full quality, background processing).
 
     EXP-014: Now allows audio-only export (no videos required).
+    EXP-026: Added audio_source parameter for selecting audio source.
     """
     data = request.json
     videos = data.get('videos', [])
@@ -275,6 +281,8 @@ def start_export():
     music_volume = float(data.get('music_volume', 0.5))
     audio_fade_in = float(data.get('audio_fade_in', 1.0))
     audio_fade_out = float(data.get('audio_fade_out', 2.0))
+    # EXP-026: Audio source selection
+    audio_source = data.get('audio_source', 'editor')  # "video", "editor", or "none"
 
     # Optional: custom filename
     custom_filename = data.get('filename', '')
@@ -349,9 +357,10 @@ def start_export():
     }
 
     # Start background thread
+    # EXP-026: Pass audio_source to run_export
     thread = threading.Thread(
         target=run_export,
-        args=(job_id, video_clips, audio_track, speech_clips, crossfade, speech_volume, output_path)
+        args=(job_id, video_clips, audio_track, speech_clips, crossfade, speech_volume, output_path, audio_source)
     )
     thread.start()
 

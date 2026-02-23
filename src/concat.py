@@ -3,6 +3,7 @@ FFmpeg-based video concatenation with crossfade transitions.
 EXP-005: Added trim support (in/out points).
 EXP-007: Added dual audio support (speech track + music track).
 EXP-014: Added audio-only support (black video + audio when no video clips).
+EXP-026: Added audio_source parameter for selecting audio source.
 """
 import subprocess
 from pathlib import Path
@@ -243,6 +244,7 @@ def concat_videos(
     speech_clips: Optional[list[SpeechClipSpec]] = None,  # Speech track
     speech_volume: float = 1.0,  # EXP-012: Speech volume (0-2.0)
     resolution: tuple[int, int] = (1920, 1080),
+    audio_source: str = "editor",  # EXP-026: "video", "editor", or "none"
 ) -> None:
     """Concatenate videos with crossfade and dual audio (speech + music).
 
@@ -250,6 +252,10 @@ def concat_videos(
     EXP-007: Added speech_clips parameter for dual audio mixing.
     EXP-012: Added speech_volume parameter for separate volume control.
     EXP-014: Falls back to audio-only when no video clips.
+    EXP-026: Added audio_source parameter:
+        - "video": Use audio from video files only (ignore speech/music tracks)
+        - "editor": Use speech and music tracks (default, current behavior)
+        - "none": No audio output (silent video)
     """
     # EXP-014: If no video clips, use audio-only function
     if len(video_clips) == 0:
@@ -363,9 +369,48 @@ def concat_videos(
             total_duration = sum(trimmed_durations) - xfade_dur * (len(video_clips) - 1)
 
     # Audio handling (EXP-007: dual audio support - speech + music)
+    # EXP-026: audio_source controls which audio to use
     has_music = audio_track is not None
     has_speech = speech_clips and len(speech_clips) > 0
 
+    # EXP-026: Handle audio_source="none" - silent video
+    if audio_source == "none":
+        cmd += ["-filter_complex", ";".join(filter_parts)]
+        cmd += ["-map", "[vout]", "-an"]
+        cmd += ["-c:v", "libx264", "-preset", "medium", "-crf", "23", str(output_path)]
+        p = subprocess.run(cmd, capture_output=True, text=True)
+        if p.returncode != 0:
+            raise RuntimeError(f"FFmpeg failed: {p.stderr}")
+        return
+
+    # EXP-026: Handle audio_source="video" - use video audio only
+    if audio_source == "video":
+        videos_with_audio = [c for c in video_clips if ffprobe_has_audio(c.path)]
+        if videos_with_audio:
+            audio_filters = [f"[{i}:a]" for i, c in enumerate(video_clips) if ffprobe_has_audio(c.path)]
+            if len(audio_filters) == 1:
+                cmd += ["-filter_complex", ";".join(filter_parts)]
+                cmd += ["-map", "[vout]", "-map", audio_filters[0].strip("[]")]
+            else:
+                audio_merge = "".join(audio_filters) + f"amix=inputs={len(audio_filters)}:normalize=0[aout]"
+                filter_parts.append(audio_merge)
+                cmd += ["-filter_complex", ";".join(filter_parts)]
+                cmd += ["-map", "[vout]", "-map", "[aout]"]
+        else:
+            cmd += ["-filter_complex", ";".join(filter_parts)]
+            cmd += ["-map", "[vout]", "-an"]
+
+        if len(video_clips) > 1:
+            cmd += ["-c:v", "libx264", "-preset", "medium", "-crf", "23", "-c:a", "aac", "-b:a", "192k", str(output_path)]
+        else:
+            cmd += ["-c:v", "libx264", "-preset", "medium", "-crf", "23", "-c:a", "aac", "-b:a", "192k", "-shortest", str(output_path)]
+
+        p = subprocess.run(cmd, capture_output=True, text=True)
+        if p.returncode != 0:
+            raise RuntimeError(f"FFmpeg failed: {p.stderr}")
+        return
+
+    # audio_source="editor" (default) - use speech and music tracks
     if has_music or has_speech:
         audio_tracks_to_mix = []
 
