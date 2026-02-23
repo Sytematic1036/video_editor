@@ -1,0 +1,20 @@
+criteria:
+  - name: "Radioknappar renderas"
+    test: "Playwright: page.locator('input[name=\"audioSource\"]')"
+    expected: "3 radioknappar synliga"
+
+  - name: "Ljud från Video fungerar"
+    test: "Ladda video med ljud, välj 'Ljud från Video', exportera"
+    expected: "Exporterad MP4 innehåller originalljud från video"
+
+  - name: "Ljud från Video Editor fungerar"
+    test: "Ladda video + music track, välj 'Ljud från Video Editor', exportera"
+    expected: "Exporterad MP4 innehåller music track ljud"
+
+  - name: "Inget ljud fungerar"
+    test: "Ladda video, välj 'Inget ljud', exportera"
+    expected: "Exporterad MP4 är helt tyst"
+
+  - name: "Bakåtkompatibilitet"
+    test: "Export utan audio_source parameter"
+    expected: "Använder 'editor' som default (nuvarande beteende)"
