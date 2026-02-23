@@ -644,6 +644,62 @@
             font-weight: bold;
         }
 
+        /* EXP-026: Audio Source Radio Buttons */
+        .audio-source-group {
+            grid-column: 1 / -1;
+            background: #0f0f23;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #333;
+        }
+        .audio-source-group h4 {
+            color: #00d9ff;
+            margin-bottom: 12px;
+            font-size: 13px;
+        }
+        .audio-source-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .audio-source-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            padding: 8px 12px;
+            border-radius: 6px;
+            background: #1a1a2e;
+            border: 1px solid #333;
+            transition: all 0.2s;
+        }
+        .audio-source-option:hover {
+            border-color: #00d9ff;
+            background: #1e2a4a;
+        }
+        .audio-source-option input[type="radio"] {
+            width: 16px;
+            height: 16px;
+            accent-color: #00d9ff;
+            cursor: pointer;
+        }
+        .audio-source-option label {
+            color: #eee;
+            font-size: 13px;
+            cursor: pointer;
+            margin: 0;
+        }
+        .audio-source-option.selected {
+            border-color: #00ff88;
+            background: #1a3a2e;
+        }
+        .audio-source-option .option-desc {
+            display: block;
+            font-size: 11px;
+            color: #666;
+            margin-top: 2px;
+        }
+
         /* Buttons */
         .buttons { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap; }
         button {
@@ -1158,6 +1214,33 @@
             <div class="setting-group">
                 <label>Music Fade Out (s)</label>
                 <input type="number" id="audioFadeOut" value="2.0" min="0" max="10" step="0.5">
+            </div>
+            <!-- EXP-026: Audio Source Selection -->
+            <div class="audio-source-group">
+                <h4>Audio Source for Export</h4>
+                <div class="audio-source-options">
+                    <div class="audio-source-option selected">
+                        <input type="radio" name="audioSource" id="audioSourceVideo" value="video">
+                        <label for="audioSourceVideo">
+                            Ljud från Video
+                            <span class="option-desc">Originalljud från uppladdade videofiler</span>
+                        </label>
+                    </div>
+                    <div class="audio-source-option">
+                        <input type="radio" name="audioSource" id="audioSourceEditor" value="editor" checked>
+                        <label for="audioSourceEditor">
+                            Ljud från Video Editor
+                            <span class="option-desc">Speech Track + Music Track</span>
+                        </label>
+                    </div>
+                    <div class="audio-source-option">
+                        <input type="radio" name="audioSource" id="audioSourceNone" value="none">
+                        <label for="audioSourceNone">
+                            Inget ljud
+                            <span class="option-desc">Exportera tyst video</span>
+                        </label>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -2976,6 +3059,17 @@
 
         document.getElementById('crossfadeDuration').addEventListener('change', renderTimeline);
 
+        // EXP-026: Audio source radio button handlers
+        document.querySelectorAll('input[name="audioSource"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                // Update visual selection state
+                document.querySelectorAll('.audio-source-option').forEach(opt => {
+                    opt.classList.remove('selected');
+                });
+                e.target.closest('.audio-source-option').classList.add('selected');
+            });
+        });
+
         // EXP-011 v4: Undo/Redo button handlers
         document.getElementById('undoBtn').addEventListener('click', undo);
         document.getElementById('redoBtn').addEventListener('click', redo);
@@ -3519,6 +3613,8 @@
                 music_volume: getMusicVolumeDecimal(),
                 audio_fade_in: parseFloat(document.getElementById('audioFadeIn').value),
                 audio_fade_out: parseFloat(document.getElementById('audioFadeOut').value),
+                // EXP-026: Audio source selection
+                audio_source: document.querySelector('input[name="audioSource"]:checked').value,
             };
 
             try {
