@@ -20,7 +20,8 @@ from html_converter import (
     convert_html_to_mp4,
     ConversionSettings,
     extract_saved_durations,
-    detect_total_slides
+    detect_total_slides,
+    update_html_durations  # EXP-025 v3
 )
 
 app = Flask(__name__)
@@ -537,11 +538,54 @@ def html_upload():
     })
 
 
+# ============================================================
+# EXP-025: Upload Audio for HTML-to-MP4
+# ============================================================
+
+@app.route('/upload-html-audio', methods=['POST'])
+def upload_html_audio():
+    """Upload an audio file for HTML-to-MP4 conversion.
+
+    EXP-025: Allows uploading external audio (MP3/WAV) to be used
+    instead of embedded HTML audio.
+    """
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+
+    filename = secure_filename(file.filename)
+    suffix = Path(filename).suffix.lower()
+
+    if suffix not in AUDIO_EXTENSIONS:
+        return jsonify({'error': f'Only audio files supported ({", ".join(AUDIO_EXTENSIONS)}), got {suffix}'}), 400
+
+    unique_name = f"html_audio_{uuid.uuid4().hex[:8]}_{filename}"
+    filepath = UPLOAD_DIR / unique_name
+    file.save(filepath)
+
+    try:
+        duration = ffprobe_duration_seconds(filepath)
+    except Exception:
+        duration = 0
+
+    return jsonify({
+        'success': True,
+        'id': unique_name,
+        'filename': filename,
+        'path': str(filepath),
+        'duration': round(duration, 2),
+    })
+
+
 @app.route('/html-to-mp4', methods=['POST'])
 def html_to_mp4():
     """Start HTML to MP4 conversion with custom durations.
 
     EXP-021: Added include_audio parameter (default: False).
+    EXP-025: Added external_audio_id parameter for external audio.
     """
     data = request.json
     html_id = data.get('html_id')
@@ -558,10 +602,18 @@ def html_to_mp4():
     fps = int(data.get('fps', 2))
     default_seconds = int(data.get('seconds_per_slide', 5))
     include_audio = data.get('include_audio', False)  # EXP-021: Default off
+    external_audio_id = data.get('external_audio_id')  # EXP-025: External audio
 
     custom_durations = data.get('custom_durations', None)
     if custom_durations:
         custom_durations = {int(k): int(v) for k, v in custom_durations.items()}
+
+    # EXP-025: Get external audio path if provided
+    external_audio_path = None
+    if external_audio_id:
+        external_audio_path = UPLOAD_DIR / secure_filename(external_audio_id)
+        if not external_audio_path.exists():
+            return jsonify({'error': 'External audio file not found'}), 404
 
     settings = ConversionSettings(
         width=width,
@@ -588,7 +640,8 @@ def html_to_mp4():
                 output_path,
                 settings,
                 custom_durations=custom_durations,
-                include_audio=include_audio  # EXP-021
+                include_audio=include_audio,  # EXP-021
+                external_audio_path=external_audio_path  # EXP-025
             )
             if result.success:
                 conversion_jobs[job_id]['status'] = 'completed'
@@ -658,10 +711,12 @@ def copy_html():
     """Copy the current HTML file with a timestamp in the filename.
 
     EXP-024: Allows saving HTML files with slide duration edits.
-    Creates a copy in html_uploads/ with format: originalname_YYYY-MM-DD_HHMMSS.html
+    EXP-025 v2: Returns download URL instead of just saving.
+    EXP-025 v3: Saves custom durations into the HTML copy.
     """
     data = request.json
     html_id = data.get('html_id')
+    custom_durations = data.get('custom_durations')  # EXP-025 v3
 
     if not html_id:
         return jsonify({'error': 'No html_id provided'}), 400
@@ -686,16 +741,44 @@ def copy_html():
     new_filename = f"{base_name}_{timestamp}.html"
     new_path = HTML_DIR / new_filename
 
-    # Copy the file
-    import shutil
-    shutil.copy2(html_path, new_path)
+    # EXP-025 v3: Read, update durations, and write
+    html_content = html_path.read_text(encoding='utf-8')
 
+    if custom_durations:
+        # Convert string keys to int
+        durations_dict = {int(k): int(v) for k, v in custom_durations.items()}
+        html_content = update_html_durations(html_content, durations_dict)
+
+    # Write updated content
+    new_path.write_text(html_content, encoding='utf-8')
+
+    # EXP-025 v2: Return download URL
     return jsonify({
         'success': True,
         'filename': new_filename,
-        'path': str(new_path),
-        'message': f'HTML copy saved as {new_filename}'
+        'download_url': url_for('download_html_copy', filename=new_filename),
+        'message': f'HTML copy ready for download'
     })
+
+
+@app.route('/download-html/<filename>')
+def download_html_copy(filename):
+    """Download an HTML copy file.
+
+    EXP-025 v2: Allows downloading HTML files to user's Downloads folder.
+    """
+    safe_filename = secure_filename(filename)
+    filepath = HTML_DIR / safe_filename
+
+    if not filepath.exists():
+        return jsonify({'error': 'File not found'}), 404
+
+    return send_file(
+        filepath,
+        mimetype='text/html',
+        as_attachment=True,
+        download_name=safe_filename,
+    )
 
 
 if __name__ == '__main__':

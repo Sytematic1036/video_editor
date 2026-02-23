@@ -1274,12 +1274,29 @@
                             Include audio (if present in HTML)
                         </label>
                     </div>
+                    <!-- EXP-025: External Audio Upload -->
+                    <div class="html-setting-item" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #333;">
+                        <label>External Audio File (optional)</label>
+                        <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px;">
+                            <input type="file" id="htmlExternalAudioInput" accept=".mp3,.wav,.aac,.m4a,.flac" style="display: none;">
+                            <button type="button" class="btn-secondary" id="btnUploadHtmlAudio" style="padding: 8px 16px;">
+                                Upload Audio
+                            </button>
+                            <span id="htmlExternalAudioName" style="color: #888; font-size: 13px;">No file selected</span>
+                            <button type="button" class="btn-cleanup" id="btnClearHtmlAudio" style="padding: 4px 8px; font-size: 12px; display: none;">
+                                Clear
+                            </button>
+                        </div>
+                        <p style="color: #666; font-size: 12px; margin-top: 4px;">
+                            External audio takes priority over HTML audio
+                        </p>
+                    </div>
                 </div>
 
                 <!-- Action Buttons -->
                 <div class="html-btn-row">
                     <button class="btn-export-final" id="generateHtmlBtn" disabled>Generate MP4</button>
-                    <button class="btn-secondary" id="copyHtmlBtn" disabled>Generate HTML Copy</button>
+                    <button class="btn-secondary" id="copyHtmlBtn" disabled>Download HTML Copy</button>
                     <button class="btn-cleanup" id="clearHtmlBtn">Clear</button>
                 </div>
 
@@ -3596,6 +3613,7 @@
         let currentHtmlJobId = null;
         let htmlPollInterval = null;
         let slideDurations = {};
+        let externalHtmlAudio = null;  // EXP-025: External audio for HTML-to-MP4
 
         const htmlDropZone = document.getElementById('htmlDropZone');
         const htmlFileInput = document.getElementById('htmlFileInput');
@@ -3636,6 +3654,57 @@
         htmlFileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (file) uploadHtmlFile(file);
+        });
+
+        // EXP-025: External audio upload handlers
+        const htmlExternalAudioInput = document.getElementById('htmlExternalAudioInput');
+        const btnUploadHtmlAudio = document.getElementById('btnUploadHtmlAudio');
+        const btnClearHtmlAudio = document.getElementById('btnClearHtmlAudio');
+        const htmlExternalAudioName = document.getElementById('htmlExternalAudioName');
+
+        btnUploadHtmlAudio.addEventListener('click', () => htmlExternalAudioInput.click());
+
+        htmlExternalAudioInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                btnUploadHtmlAudio.disabled = true;
+                btnUploadHtmlAudio.textContent = 'Uploading...';
+
+                const response = await fetch('/upload-html-audio', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    externalHtmlAudio = data;
+                    htmlExternalAudioName.textContent = `${data.filename} (${data.duration}s)`;
+                    htmlExternalAudioName.style.color = '#4CAF50';
+                    btnClearHtmlAudio.style.display = 'inline-block';
+                    showHtmlStatus(`Audio uploaded: ${data.filename}`, 'success');
+                } else {
+                    showHtmlStatus(data.error || 'Audio upload failed', 'error');
+                }
+            } catch (error) {
+                showHtmlStatus('Audio upload error: ' + error.message, 'error');
+            } finally {
+                btnUploadHtmlAudio.disabled = false;
+                btnUploadHtmlAudio.textContent = 'Upload Audio';
+            }
+        });
+
+        btnClearHtmlAudio.addEventListener('click', () => {
+            externalHtmlAudio = null;
+            htmlExternalAudioName.textContent = 'No file selected';
+            htmlExternalAudioName.style.color = '#888';
+            btnClearHtmlAudio.style.display = 'none';
+            htmlExternalAudioInput.value = '';
         });
 
         async function uploadHtmlFile(file) {
@@ -3759,17 +3828,25 @@
             try {
                 const includeAudio = document.getElementById('htmlIncludeAudio').checked;
 
+                // EXP-025: Build request body with optional external audio
+                const requestBody = {
+                    html_id: uploadedHtml.id,
+                    width: parseInt(resolution[0]),
+                    height: parseInt(resolution[1]),
+                    fps: fps,
+                    custom_durations: customDurations,
+                    include_audio: includeAudio
+                };
+
+                // EXP-025: Add external audio if uploaded
+                if (externalHtmlAudio && externalHtmlAudio.id) {
+                    requestBody.external_audio_id = externalHtmlAudio.id;
+                }
+
                 const response = await fetch('/html-to-mp4', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        html_id: uploadedHtml.id,
-                        width: parseInt(resolution[0]),
-                        height: parseInt(resolution[1]),
-                        fps: fps,
-                        custom_durations: customDurations,
-                        include_audio: includeAudio
-                    })
+                    body: JSON.stringify(requestBody)
                 });
 
                 const data = await response.json();
@@ -3842,6 +3919,13 @@
             slideDurations = {};
             stopHtmlPolling();
 
+            // EXP-025: Clear external audio
+            externalHtmlAudio = null;
+            htmlExternalAudioName.textContent = 'No file selected';
+            htmlExternalAudioName.style.color = '#888';
+            btnClearHtmlAudio.style.display = 'none';
+            htmlExternalAudioInput.value = '';
+
             htmlFileInfo.classList.remove('visible');
             slideDurationsSection.classList.remove('visible');
             slideDurationsGrid.innerHTML = '';
@@ -3861,6 +3945,8 @@
         });
 
         // EXP-024: Generate HTML Copy button
+        // EXP-025 v2: Download HTML copy instead of just saving
+        // EXP-025 v3: Include custom durations in download
         copyHtmlBtn.addEventListener('click', async () => {
             if (!uploadedHtml || !uploadedHtml.id) {
                 showHtmlStatus('No HTML file to copy', 'error');
@@ -3868,20 +3954,32 @@
             }
 
             try {
+                copyHtmlBtn.disabled = true;
+                copyHtmlBtn.textContent = 'Preparing...';
+
+                // EXP-025 v3: Send current slide durations
                 const response = await fetch('/copy-html', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ html_id: uploadedHtml.id })
+                    body: JSON.stringify({
+                        html_id: uploadedHtml.id,
+                        custom_durations: slideDurations  // Include edited durations
+                    })
                 });
                 const data = await response.json();
 
-                if (data.success) {
-                    showHtmlStatus(`HTML copy saved: ${data.filename}`, 'success');
+                if (data.success && data.download_url) {
+                    // Trigger browser download
+                    window.location.href = data.download_url;
+                    showHtmlStatus(`Downloading: ${data.filename} (with your durations)`, 'success');
                 } else {
                     showHtmlStatus(data.error || 'Failed to copy HTML', 'error');
                 }
             } catch (error) {
                 showHtmlStatus('Error: ' + error.message, 'error');
+            } finally {
+                copyHtmlBtn.disabled = false;
+                copyHtmlBtn.textContent = 'Download HTML Copy';
             }
         });
 
